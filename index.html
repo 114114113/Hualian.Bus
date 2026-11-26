@@ -49,7 +49,7 @@
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen">
 
-    <!-- 頁首導覽（已移除匯入按鈕與狀態列） -->
+    <!-- 頁首導覽 -->
     <header class="bg-slate-900 text-white shadow-xl sticky top-0 z-50 border-b border-slate-800">
         <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
             <div class="flex items-center space-x-3">
@@ -153,6 +153,7 @@
     </main>
 
     <script>
+        let rawNetworkData = null;
         let allRoutesData = [];
         let globalStopsMap = {};
         let currentRouteKey = null;
@@ -169,13 +170,23 @@
         let simSpeed = 30;
         let lastFrameTimestamp = null;
 
-        // 自動偵測 [經度, 緯度] 並轉換為 Leaflet 需要的 [緯度, 經度]
         function toLatLng(coord) {
             if (!Array.isArray(coord) || coord.length < 2) return null;
             const a = Number(coord[0]);
             const b = Number(coord[1]);
+            if (isNaN(a) || isNaN(b)) return null;
             if (Math.abs(a) > 90) return [b, a];
             return [a, b];
+        }
+
+        function extractStopCoord(stObj) {
+            if (!stObj) return null;
+            if (Array.isArray(stObj.coord)) return toLatLng(stObj.coord);
+            if (Array.isArray(stObj.location)) return toLatLng(stObj.location);
+            if (Array.isArray(stObj.pos)) return toLatLng(stObj.pos);
+            if (typeof stObj.lat === 'number' && typeof stObj.lng === 'number') return [stObj.lat, stObj.lng];
+            if (typeof stObj.lat === 'number' && typeof stObj.lon === 'number') return [stObj.lat, stObj.lon];
+            return null;
         }
 
         function getRouteKey(r, fallbackIdx = 0) {
@@ -191,24 +202,34 @@
             busMarkersLayer = L.layerGroup().addTo(leafletMap);
         }
 
-        // 自動讀取同目錄下的 bus_network.json（適用於 GitHub Pages / HTTP Server）
+        // 建立全檔案所有站牌索引
+        function buildGlobalStopIndex(data) {
+            globalStopsMap = {};
+            const addStop = (s, keyFallback) => {
+                if (!s || typeof s !== 'object') return;
+                const id = s.id || s.stopId || keyFallback;
+                if (id) globalStopsMap[id] = { ...s, id };
+            };
+
+            if (Array.isArray(data.stops)) {
+                data.stops.forEach((s, i) => addStop(s, `stop_${i}`));
+            } else if (data.stops && typeof data.stops === 'object') {
+                Object.entries(data.stops).forEach(([k, v]) => addStop(v, k));
+            }
+        }
+
         async function loadNetworkData() {
             try {
                 const res = await fetch('./bus_network.json');
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
+                rawNetworkData = data;
 
                 if (!data || !Array.isArray(data.routes)) {
                     throw new Error("JSON 格式不符，找不到 routes 陣列");
                 }
 
-                globalStopsMap = {};
-                if (Array.isArray(data.stops)) {
-                    data.stops.forEach(s => { if (s.id) globalStopsMap[s.id] = s; });
-                } else if (data.stops && typeof data.stops === 'object') {
-                    Object.assign(globalStopsMap, data.stops);
-                }
-
+                buildGlobalStopIndex(data);
                 allRoutesData = data.routes.filter(r => r && r.patterns);
                 pathMetricsCache = {};
 
@@ -226,70 +247,122 @@
             }
         }
 
+        // 萬用站牌解析器：從 pattern.stopCalls / pattern.stops / pattern.stopIds / route.stops 完整萃取站牌
         function getStopsForDirection(route, directionKey) {
             const pattern = route.patterns ? route.patterns[directionKey] : null;
-            const patternId = pattern ? (pattern.id || directionKey) : directionKey;
+            if (!pattern) return [];
+            const patternId = pattern.id || directionKey;
 
-            if (route.stops && !Array.isArray(route.stops)) {
-                if (Array.isArray(route.stops[directionKey])) return route.stops[directionKey];
-                if (Array.isArray(route.stops[patternId])) return route.stops[patternId];
-            }
-
-            const stopLookup = { ...globalStopsMap };
+            // 建立該路線局部站牌查找表
+            const localLookup = { ...globalStopsMap };
             if (Array.isArray(route.stops)) {
-                route.stops.forEach(s => { if (s.id) stopLookup[s.id] = s; });
+                route.stops.forEach(s => { if (s && (s.id || s.stopId)) localLookup[s.id || s.stopId] = s; });
             } else if (route.stops && typeof route.stops === 'object') {
-                Object.values(route.stops).forEach(val => {
-                    if (Array.isArray(val)) val.forEach(s => { if (s.id) stopLookup[s.id] = s; });
-                    else if (val && val.id) stopLookup[val.id] = val;
+                Object.entries(route.stops).forEach(([k, v]) => {
+                    if (Array.isArray(v)) v.forEach(s => { if (s && (s.id || s.stopId)) localLookup[s.id || s.stopId] = s; });
+                    else if (v && typeof v === 'object') localLookup[v.id || k] = v;
                 });
             }
 
-            if (pattern && Array.isArray(pattern.stopCalls) && pattern.stopCalls.length > 0) {
-                return pattern.stopCalls.map((call, idx) => {
-                    const stObj = stopLookup[call.stopId] || {};
-                    return {
-                        id: call.stopId,
-                        name: call.name || call.stopName || stObj.name || `第 ${idx + 1} 站`,
-                        coord: call.coord || stObj.coord || (stObj.lat && stObj.lng ? [stObj.lat, stObj.lng] : null),
-                        status: stObj.status || ""
-                    };
-                }).filter(s => s.coord);
+            // 情況 1：pattern 內有 stopCalls 或 stops 或 stopIds 陣列（V0.012 標準結構）
+            const callList = pattern.stopCalls || pattern.stops || pattern.stopIds || null;
+            if (Array.isArray(callList) && callList.length > 0) {
+                const resolved = callList.map((item, idx) => {
+                    if (typeof item === 'string') {
+                        const st = localLookup[item] || {};
+                        return {
+                            id: item,
+                            name: st.name || st.stopName || `第 ${idx + 1} 站`,
+                            coord: extractStopCoord(st),
+                            distanceAlongPathM: null,
+                            status: st.status || ""
+                        };
+                    } else if (item && typeof item === 'object') {
+                        const sid = item.stopId || item.id;
+                        const st = (sid && localLookup[sid]) ? localLookup[sid] : {};
+                        return {
+                            id: sid || `s_${idx}`,
+                            name: item.name || item.stopName || st.name || st.stopName || `第 ${idx + 1} 站`,
+                            coord: extractStopCoord(item) || extractStopCoord(st),
+                            distanceAlongPathM: typeof item.distanceAlongPathM === 'number' ? item.distanceAlongPathM : null,
+                            status: item.status || st.status || ""
+                        };
+                    }
+                    return null;
+                }).filter(s => s && s.coord);
+
+                if (resolved.length > 0) return resolved;
             }
 
-            if (Array.isArray(route.stops)) {
-                const filtered = route.stops.filter(s => s.patternId === patternId || s.direction === directionKey);
-                return filtered.length > 0 ? filtered : route.stops;
+            // 情況 2：route.stops[directionKey] 或 route.stops[patternId]
+            if (route.stops && !Array.isArray(route.stops)) {
+                const list = route.stops[directionKey] || route.stops[patternId];
+                if (Array.isArray(list)) {
+                    return list.map((s, idx) => ({
+                        id: s.id || `s_${idx}`,
+                        name: s.name || `第 ${idx + 1} 站`,
+                        coord: extractStopCoord(s),
+                        distanceAlongPathM: s.distanceAlongPathM ?? null,
+                        status: s.status || ""
+                    })).filter(s => s.coord);
+                }
             }
 
             return [];
         }
 
+        // 萬用班次解析器：從 route.trips / pattern.trips / 頂層 trips 萃取班次
         function getTripsForDirection(route, directionKey) {
-            if (!route.trips) return [];
             const pattern = route.patterns ? route.patterns[directionKey] : null;
             const patternId = pattern ? (pattern.id || directionKey) : directionKey;
+            const routeId = route.id || route.code;
 
-            if (!Array.isArray(route.trips)) {
-                return route.trips[directionKey] || route.trips[patternId] || [];
+            // 1. 直接掛在 pattern 底下
+            if (pattern && Array.isArray(pattern.trips)) return pattern.trips;
+
+            // 2. 掛在 route.trips 底下
+            if (route.trips) {
+                if (!Array.isArray(route.trips)) {
+                    return route.trips[directionKey] || route.trips[patternId] || [];
+                }
+                const matched = route.trips.filter(t =>
+                    t.patternId === patternId ||
+                    t.patternId === directionKey ||
+                    t.direction === directionKey
+                );
+                if (matched.length > 0) return matched;
+                // 若該路線只有一個方向或班次沒標 patternId，回傳全部
+                if (Object.keys(route.patterns).length === 1) return route.trips;
             }
-            return route.trips.filter(t => t.patternId === patternId || t.direction === directionKey || t.patternId === directionKey);
+
+            // 3. 掛在頂層 rawNetworkData.trips 底下
+            if (rawNetworkData && Array.isArray(rawNetworkData.trips)) {
+                return rawNetworkData.trips.filter(t =>
+                    t.patternId === patternId ||
+                    (t.routeId === routeId && (t.direction === directionKey || t.patternId === directionKey))
+                );
+            }
+
+            return [];
         }
 
+        // 萬用時間配置解析器（timingProfiles）
         function getTimingProfileForDirection(route, directionKey, sampleTrip) {
-            if (!route.timingProfiles) return null;
             const pattern = route.patterns ? route.patterns[directionKey] : null;
             const patternId = pattern ? (pattern.id || directionKey) : directionKey;
             const profileId = sampleTrip ? sampleTrip.timingProfileId : null;
 
-            if (!Array.isArray(route.timingProfiles)) {
-                return (profileId && route.timingProfiles[profileId])
-                    || route.timingProfiles[directionKey]
-                    || route.timingProfiles[patternId]
-                    || null;
+            const sources = [route.timingProfiles, rawNetworkData?.timingProfiles].filter(Boolean);
+            for (const src of sources) {
+                if (!Array.isArray(src)) {
+                    const found = (profileId && src[profileId]) || src[directionKey] || src[patternId];
+                    if (found) return Array.isArray(found) ? found : (found.stops || found.calls || null);
+                } else {
+                    const found = src.find(p => p.id === profileId || p.patternId === patternId || p.direction === directionKey);
+                    if (found) return Array.isArray(found) ? found : (found.stops || found.calls || null);
+                }
             }
-            const found = route.timingProfiles.find(p => p.id === profileId || p.patternId === patternId || p.direction === directionKey);
-            return found ? (found.stops || found.calls || found) : null;
+            return null;
         }
 
         function calcDistanceM(lat1, lon1, lat2, lon2) {
@@ -338,24 +411,27 @@
             const stops = getStopsForDirection(route, direction);
             if (!pattern || !Array.isArray(pattern.path) || pattern.path.length < 2) return null;
 
+            const startSec = Number(trip.startSec ?? trip.departureSec ?? trip.startTimeSec);
+            if (isNaN(startSec)) return null;
+
             const metrics = getPathMetrics(routeKey, direction, pattern.path);
             const profile = getTimingProfileForDirection(route, direction, trip);
-            const stopCalls = Array.isArray(pattern.stopCalls) ? pattern.stopCalls : null;
 
+            // 1. 若有完整的 timingProfiles（精準到站/離站秒數）
             if (Array.isArray(profile) && profile.length > 0) {
-                const firstDep = trip.startSec + (profile[0].departureOffsetSec ?? profile[0].arrivalOffsetSec ?? 0);
+                const firstDep = startSec + (profile[0].departureOffsetSec ?? profile[0].arrivalOffsetSec ?? 0);
                 const lastEntry = profile[profile.length - 1];
-                const lastArr = trip.startSec + (lastEntry.arrivalOffsetSec ?? lastEntry.departureOffsetSec ?? 0);
+                const lastArr = startSec + (lastEntry.arrivalOffsetSec ?? lastEntry.departureOffsetSec ?? 0);
 
                 if (nowSec < firstDep || nowSec > lastArr) return null;
 
                 for (let i = 0; i < profile.length; i++) {
                     const pNow = profile[i];
-                    const arrTime = trip.startSec + (pNow.arrivalOffsetSec ?? 0);
-                    const depTime = trip.startSec + (pNow.departureOffsetSec ?? arrTime);
+                    const arrTime = startSec + (pNow.arrivalOffsetSec ?? 0);
+                    const depTime = startSec + (pNow.departureOffsetSec ?? arrTime);
 
-                    const distHere = (stopCalls && stopCalls[i] && typeof stopCalls[i].distanceAlongPathM === 'number')
-                        ? stopCalls[i].distanceAlongPathM
+                    const distHere = (stops[i] && typeof stops[i].distanceAlongPathM === 'number')
+                        ? stops[i].distanceAlongPathM
                         : (metrics.totalDist * (i / Math.max(1, profile.length - 1)));
 
                     if (nowSec >= arrTime && nowSec <= depTime) {
@@ -368,10 +444,10 @@
 
                     if (i < profile.length - 1) {
                         const pNext = profile[i + 1];
-                        const nextArr = trip.startSec + (pNext.arrivalOffsetSec ?? 0);
+                        const nextArr = startSec + (pNext.arrivalOffsetSec ?? 0);
                         if (nowSec > depTime && nowSec < nextArr) {
-                            const distNext = (stopCalls && stopCalls[i + 1] && typeof stopCalls[i + 1].distanceAlongPathM === 'number')
-                                ? stopCalls[i + 1].distanceAlongPathM
+                            const distNext = (stops[i + 1] && typeof stops[i + 1].distanceAlongPathM === 'number')
+                                ? stops[i + 1].distanceAlongPathM
                                 : (metrics.totalDist * ((i + 1) / Math.max(1, profile.length - 1)));
 
                             const ratio = (nextArr > depTime) ? (nowSec - depTime) / (nextArr - depTime) : 0;
@@ -384,6 +460,17 @@
                         }
                     }
                 }
+            } else {
+                // 2. 備援估算：依道路總長推估行駛時間（平均時速 30km/h，至少 20 分鐘）
+                const estDuration = Math.max(1200, Math.round(metrics.totalDist / 8.33));
+                if (nowSec < startSec || nowSec > startSec + estDuration) return null;
+                const ratio = (nowSec - startSec) / estDuration;
+                const stopIdx = stops.length > 0 ? Math.min(stops.length - 1, Math.floor(ratio * stops.length)) : 0;
+                const nearName = stops[stopIdx] ? stops[stopIdx].name : "路線途中";
+                return {
+                    coord: getCoordAtDistance(metrics, metrics.totalDist * ratio),
+                    statusText: `行駛中（約近 ${nearName}）`
+                };
             }
             return null;
         }
@@ -418,12 +505,13 @@
                             iconAnchor: [15, 15]
                         });
 
+                        const startSec = Number(trip.startSec ?? trip.departureSec ?? 0);
                         const marker = L.marker(pos.coord, { icon: busIcon, zIndexOffset: 1000 });
                         marker.bindPopup(`
                             <div style="font-family:sans-serif;">
                                 <span style="background:${badgeColor};color:white;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:bold;">${currentRouteKey.replace('hualien_', '')} · ${dirLabel}</span>
                                 <div style="font-size:14px;font-weight:900;margin-top:4px;color:#0f172a;">${pos.statusText}</div>
-                                <div style="font-size:11px;color:#64748b;margin-top:2px;">起站發車：${secToTimeStr(trip.startSec)}</div>
+                                <div style="font-size:11px;color:#64748b;margin-top:2px;">起站發車：${secToTimeStr(startSec)}</div>
                             </div>
                         `);
                         marker.addTo(busMarkersLayer);
@@ -519,9 +607,8 @@
 
             const showLabels = document.getElementById('toggle-labels').checked;
             stops.forEach((st, idx) => {
-                const latLng = toLatLng(st.coord);
-                if (!latLng) return;
-                const [lat, lng] = latLng;
+                if (!st.coord) return;
+                const [lat, lng] = st.coord;
                 const isTerminal = idx === 0 || idx === stops.length - 1;
 
                 const circle = L.circleMarker([lat, lng], {
@@ -626,13 +713,14 @@
                 return;
             }
 
-            const sortedTrips = [...trips].sort((a, b) => a.startSec - b.startSec);
+            const sortedTrips = [...trips].sort((a, b) => Number(a.startSec ?? 0) - Number(b.startSec ?? 0));
             sortedTrips.forEach((trip, i) => {
-                const timeStr = secToTimeStr(trip.startSec);
+                const startSec = Number(trip.startSec ?? trip.departureSec ?? 0);
+                const timeStr = secToTimeStr(startSec);
                 const item = document.createElement('div');
                 item.className = "p-3 rounded-2xl bg-slate-50 border border-slate-200 flex justify-between items-center hover:border-emerald-500 hover:bg-emerald-50/40 cursor-pointer transition shadow-sm";
                 item.onclick = () => {
-                    simTimeSec = trip.startSec + 30;
+                    simTimeSec = startSec + 30;
                     updateClockUI();
                 };
                 item.innerHTML = `
