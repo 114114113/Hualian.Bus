@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>花蓮公車路線時刻與動態模擬檢視器</title>
+    <title>花蓮公車客運班次查詢與動態模擬系統</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -37,13 +37,13 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 30px;
-            height: 30px;
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
             color: white;
-            font-size: 13px;
-            border: 2.5px solid #ffffff;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.45);
+            font-size: 15px;
+            border: 3px solid #ffffff;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.5);
         }
     </style>
 </head>
@@ -52,32 +52,89 @@
     <!-- 頁首導覽 -->
     <header class="bg-slate-900 text-white shadow-xl sticky top-0 z-50 border-b border-slate-800">
         <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-3 cursor-pointer" onclick="goHome()">
                 <div class="bg-emerald-500 p-2.5 rounded-2xl text-white shadow-lg shadow-emerald-500/30">
                     <i class="fa-solid fa-bus text-xl"></i>
                 </div>
                 <div>
-                    <h1 class="font-black text-lg tracking-wide text-white">花蓮公車路線時刻與動態模擬器</h1>
-                    <p class="text-[11px] text-emerald-400 font-semibold tracking-wider">整合全縣 26 條公車路網、實體站牌座標與 24 小時班次動態模擬</p>
+                    <h1 class="font-black text-lg tracking-wide text-white">花蓮公車客運班次與動態模擬系統</h1>
+                    <p class="text-[11px] text-emerald-400 font-semibold tracking-wider">選擇客運業者與發車班次，即時模擬行駛軌跡與到站進度</p>
                 </div>
             </div>
+            <button id="btn-back-home" onclick="goHome()" class="hidden bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 px-4 py-2 rounded-xl text-xs font-bold flex items-center transition">
+                <i class="fa-solid fa-arrow-left mr-2 text-emerald-400"></i>返回首頁選擇其他班次
+            </button>
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto px-6 py-6 space-y-6">
+    <!-- ==========================================
+         視圖 1：首頁（客運業者分類與所有班次總覽）
+         ========================================== -->
+    <section id="home-view" class="max-w-7xl mx-auto px-6 py-8 space-y-6">
+        
+        <!-- 歡迎橫幅與客運篩選 -->
+        <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md space-y-5">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+                <div>
+                    <h2 class="text-xl font-black text-slate-800">請選擇客運業者與欲模擬的發車班次</h2>
+                    <p class="text-xs text-slate-500 font-bold mt-1">點擊下方任一發車時間（例如 08:00），系統將自動載入該班次路線並啟動動態模擬</p>
+                </div>
+                <div class="relative w-full md:w-64">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-400 text-xs"></i>
+                    <input type="text" id="route-search-input" oninput="renderHomeOperators()" placeholder="搜尋路線編號或站名..." class="w-full pl-9 pr-4 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:border-emerald-500">
+                </div>
+            </div>
 
-        <!-- 時間模擬控制列 -->
-        <div class="bg-slate-900 text-white rounded-3xl p-5 shadow-lg border border-slate-800 space-y-3">
+            <!-- 客運公司篩選按鈕 -->
+            <div id="operator-filter-tabs" class="flex flex-wrap gap-2">
+                <!-- 動態產生客運公司標籤 -->
+            </div>
+        </div>
+
+        <!-- 載入提示 -->
+        <div id="home-loading" class="text-center py-16 text-slate-400 font-bold text-sm">
+            <i class="fa-solid fa-spinner fa-spin text-2xl text-emerald-500 mb-3 block"></i>
+            正在載入花蓮各家客運路網與班次資料...
+        </div>
+
+        <!-- 客運公司與路線班次卡片列表 -->
+        <div id="operators-container" class="space-y-8"></div>
+
+    </section>
+
+    <!-- ==========================================
+         視圖 2：單一班次專屬動態模擬器
+         ========================================== -->
+    <section id="sim-view" class="hidden max-w-7xl mx-auto px-6 py-6 space-y-6">
+
+        <!-- 選定班次資訊卡 + 時間模擬控制列 -->
+        <div class="bg-slate-900 text-white rounded-3xl p-6 shadow-xl border border-slate-800 space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                <div class="flex items-center space-x-3">
+                    <span id="sim-operator-badge" class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-black px-3 py-1 rounded-lg">太魯閣客運</span>
+                    <span id="sim-route-badge" class="bg-blue-600 text-white text-xs font-black px-3 py-1 rounded-lg">301 路</span>
+                    <h2 id="sim-route-title" class="text-lg font-black text-white">花蓮轉運站 ⇄ 東華大學</h2>
+                </div>
+                <div class="flex items-center space-x-2 text-xs font-bold">
+                    <span class="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl text-slate-300">
+                        選定班次發車：<strong id="sim-trip-start-label" class="text-amber-400 font-mono text-sm ml-1">08:00</strong>
+                    </span>
+                    <span class="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl text-slate-300">
+                        預估抵達終點：<strong id="sim-trip-end-label" class="text-emerald-400 font-mono text-sm ml-1">08:45</strong>
+                    </span>
+                </div>
+            </div>
+
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div class="flex items-center space-x-3">
                     <button id="btn-play-pause" onclick="togglePlay()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-4 py-2 rounded-xl text-xs flex items-center transition shadow-md">
-                        <i id="play-icon" class="fa-solid fa-play mr-1.5"></i><span id="play-text">開始模擬</span>
+                        <i id="play-icon" class="fa-solid fa-pause mr-1.5"></i><span id="play-text">暫停模擬</span>
                     </button>
                     <div class="bg-slate-800 px-4 py-1.5 rounded-xl border border-slate-700 font-mono text-xl font-black text-amber-400 tracking-wider" id="sim-clock-display">
                         08:00:00
                     </div>
-                    <span id="active-bus-count" class="text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 px-3 py-1.5 rounded-xl">
-                        此路線行駛中：0 輛
+                    <span id="sim-live-status" class="text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 px-3.5 py-1.5 rounded-xl">
+                        準備發車中...
                     </span>
                 </div>
 
@@ -91,46 +148,29 @@
                 </div>
             </div>
 
-            <!-- 00:00 ~ 24:00 時間軸滑桿 -->
+            <!-- 班次行程進度時間軸 -->
             <div class="space-y-1">
                 <input type="range" id="time-slider" min="0" max="86399" value="28800" oninput="onSliderChange(this.value)" class="w-full accent-emerald-500 cursor-pointer h-2 bg-slate-700 rounded-lg">
                 <div class="flex justify-between text-[10px] font-mono text-slate-400 px-1">
-                    <span>00:00</span><span>04:00</span><span>08:00</span><span>12:00</span><span>16:00</span><span>20:00</span><span>24:00</span>
+                    <span id="slider-label-start">00:00</span>
+                    <span>拖曳滑桿可快轉或倒轉檢視此班次行駛位置</span>
+                    <span id="slider-label-end">24:00</span>
                 </div>
             </div>
         </div>
 
-        <!-- 路線選擇按鈕區 -->
-        <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-md space-y-3">
-            <div class="text-xs font-extrabold text-slate-400 uppercase tracking-wider flex justify-between items-center">
-                <span><i class="fa-solid fa-layer-group text-emerald-600 mr-2"></i>選擇路線</span>
-                <span class="text-[11px] text-slate-500">點擊路線編號切換檢視</span>
-            </div>
-            <div id="route-buttons-grid" class="flex flex-wrap gap-2"></div>
-        </div>
-
-        <!-- 路線標題與方向切換 -->
-        <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-                <div class="flex items-center space-x-3">
-                    <span id="route-code-badge" class="bg-slate-800 text-white text-xs font-bold px-3 py-1 rounded-lg">載入中</span>
-                    <h2 id="route-title" class="text-xl font-black text-slate-800">正在讀取路網資料...</h2>
-                </div>
-                <p id="route-desc" class="text-sm text-slate-500 font-bold mt-1">請稍候，正在同步站牌與路線軌跡</p>
-            </div>
-            <div id="direction-tabs" class="flex bg-slate-100 p-1.5 rounded-2xl text-xs font-bold space-x-1"></div>
-        </div>
-
-        <!-- 主體內容：左側時刻表與右側地圖並排 -->
+        <!-- 主體內容：左側沿線停靠站時刻表 + 右側地圖 -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             
-            <!-- 左側：發車時間列表 -->
+            <!-- 左側：本班次各站預估時刻表 -->
             <div class="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md space-y-4 flex flex-col h-[560px]">
-                <h3 id="schedule-heading" class="font-extrabold text-sm text-slate-800 flex items-center border-b border-slate-100 pb-3">
-                    <i class="fa-solid fa-clock text-emerald-600 mr-2"></i>發車時間表
-                </h3>
-                <div id="schedule-list" class="space-y-2 overflow-y-auto pr-1 flex-1 no-scrollbar">
-                    <div class="text-center text-xs text-slate-400 py-12">載入時刻表中...</div>
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 class="font-extrabold text-sm text-slate-800 flex items-center">
+                        <i class="fa-solid fa-list-ol text-emerald-600 mr-2"></i>本班次沿線停靠站與預估時間
+                    </h3>
+                </div>
+                <div id="stop-timeline-list" class="space-y-1.5 overflow-y-auto pr-1 flex-1 no-scrollbar">
+                    <!-- 動態產生各站預估抵達時間 -->
                 </div>
             </div>
 
@@ -138,7 +178,7 @@
             <div class="lg:col-span-2 bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md space-y-3">
                 <div class="flex justify-between items-center">
                     <h3 class="font-extrabold text-sm text-slate-800 flex items-center">
-                        <i class="fa-solid fa-map-location-dot text-emerald-600 mr-2 text-base"></i>公車道路折線、站牌位置與動態模擬
+                        <i class="fa-solid fa-map-location-dot text-emerald-600 mr-2 text-base"></i>班次行駛道路與即時動態位置
                     </h3>
                     <label class="text-xs font-bold text-slate-600 flex items-center cursor-pointer select-none">
                         <input type="checkbox" id="toggle-labels" checked onchange="toggleStationLabels()" class="mr-1.5 rounded text-blue-600">
@@ -150,25 +190,50 @@
 
         </div>
 
-    </main>
+    </section>
 
     <script>
         let rawNetworkData = null;
         let allRoutesData = [];
         let globalStopsMap = {};
-        let currentRouteKey = null;
-        let currentDirectionKey = null;
         let pathMetricsCache = {};
+        let selectedOperatorFilter = "ALL";
+
+        // 當前正在模擬的單一班次狀態
+        let activeSim = {
+            route: null,
+            routeKey: null,
+            directionKey: null,
+            trip: null,
+            startSec: 28800,
+            endSec: 31500
+        };
 
         let leafletMap = null;
         let staticLayers = [];
         let labelMarkers = [];
         let busMarkersLayer = null;
 
-        let simTimeSec = 28800; // 預設 08:00:00
+        let simTimeSec = 28800;
         let isPlaying = false;
         let simSpeed = 30;
         let lastFrameTimestamp = null;
+
+        // 依路線編號自動歸類客運業者（優先讀取 JSON 內的 operator 欄位，若無則依花蓮路線規則判斷）
+        function getOperatorName(route) {
+            if (route.operator) return route.operator;
+            const code = getRouteKey(route).replace('hualien_', '');
+            if (code.startsWith('301') || code.startsWith('302') || code.startsWith('303') || code.startsWith('305')) {
+                return "太魯閣客運";
+            }
+            if (code.startsWith('308') || code.startsWith('310') || code.startsWith('311') || code.startsWith('1121') || code.startsWith('1122') || code.startsWith('1128') || code.startsWith('1129') || code.startsWith('1132') || code.startsWith('1133') || code.startsWith('1136') || code.startsWith('1139') || code.startsWith('1140') || code.startsWith('1141')) {
+                return "統聯客運";
+            }
+            if (code.startsWith('1125') || code.startsWith('1130') || code.startsWith('1145')) {
+                return "興東客運 / 花蓮客運";
+            }
+            return "花蓮市區與公路客運";
+        }
 
         function toLatLng(coord) {
             if (!Array.isArray(coord) || coord.length < 2) return null;
@@ -194,6 +259,7 @@
         }
 
         function initMap() {
+            if (leafletMap) return;
             leafletMap = L.map('leaflet-map-box').setView([23.987, 121.601], 13);
             L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
                 maxZoom: 19,
@@ -202,7 +268,6 @@
             busMarkersLayer = L.layerGroup().addTo(leafletMap);
         }
 
-        // 建立全檔案所有站牌索引
         function buildGlobalStopIndex(data) {
             globalStopsMap = {};
             const addStop = (s, keyFallback) => {
@@ -210,7 +275,6 @@
                 const id = s.id || s.stopId || keyFallback;
                 if (id) globalStopsMap[id] = { ...s, id };
             };
-
             if (Array.isArray(data.stops)) {
                 data.stops.forEach((s, i) => addStop(s, `stop_${i}`));
             } else if (data.stops && typeof data.stops === 'object') {
@@ -225,35 +289,25 @@
                 const data = await res.json();
                 rawNetworkData = data;
 
-                if (!data || !Array.isArray(data.routes)) {
-                    throw new Error("JSON 格式不符，找不到 routes 陣列");
-                }
-
                 buildGlobalStopIndex(data);
-                allRoutesData = data.routes.filter(r => r && r.patterns);
-                pathMetricsCache = {};
+                allRoutesData = (data.routes || []).filter(r => r && r.patterns);
+                document.getElementById('home-loading').classList.add('hidden');
 
-                if (allRoutesData.length > 0) {
-                    currentRouteKey = getRouteKey(allRoutesData[0], 0);
-                    const dirs = Object.keys(allRoutesData[0].patterns);
-                    currentDirectionKey = dirs[0] || "outbound";
-                    updateDisplay();
-                }
+                renderOperatorFilterTabs();
+                renderHomeOperators();
             } catch (err) {
-                console.error("讀取路網資料失敗：", err);
-                document.getElementById('route-code-badge').innerText = "載入失敗";
-                document.getElementById('route-title').innerText = "無法讀取 bus_network.json";
-                document.getElementById('route-desc').innerText = "請確認 bus_network.json 已與本網頁一同上傳至 GitHub 同一資料夾中。";
+                document.getElementById('home-loading').innerHTML = `
+                    <div class="text-rose-500 font-black">無法讀取 bus_network.json</div>
+                    <div class="text-xs text-slate-500 mt-1">請確認 bus_network.json 與 index.html 位於同一資料夾中。</div>
+                `;
             }
         }
 
-        // 萬用站牌解析器：從 pattern.stopCalls / pattern.stops / pattern.stopIds / route.stops 完整萃取站牌
         function getStopsForDirection(route, directionKey) {
             const pattern = route.patterns ? route.patterns[directionKey] : null;
             if (!pattern) return [];
             const patternId = pattern.id || directionKey;
 
-            // 建立該路線局部站牌查找表
             const localLookup = { ...globalStopsMap };
             if (Array.isArray(route.stops)) {
                 route.stops.forEach(s => { if (s && (s.id || s.stopId)) localLookup[s.id || s.stopId] = s; });
@@ -264,19 +318,12 @@
                 });
             }
 
-            // 情況 1：pattern 內有 stopCalls 或 stops 或 stopIds 陣列（V0.012 標準結構）
             const callList = pattern.stopCalls || pattern.stops || pattern.stopIds || null;
             if (Array.isArray(callList) && callList.length > 0) {
                 const resolved = callList.map((item, idx) => {
                     if (typeof item === 'string') {
                         const st = localLookup[item] || {};
-                        return {
-                            id: item,
-                            name: st.name || st.stopName || `第 ${idx + 1} 站`,
-                            coord: extractStopCoord(st),
-                            distanceAlongPathM: null,
-                            status: st.status || ""
-                        };
+                        return { id: item, name: st.name || st.stopName || `第 ${idx + 1} 站`, coord: extractStopCoord(st), distanceAlongPathM: null };
                     } else if (item && typeof item === 'object') {
                         const sid = item.stopId || item.id;
                         const st = (sid && localLookup[sid]) ? localLookup[sid] : {};
@@ -284,17 +331,14 @@
                             id: sid || `s_${idx}`,
                             name: item.name || item.stopName || st.name || st.stopName || `第 ${idx + 1} 站`,
                             coord: extractStopCoord(item) || extractStopCoord(st),
-                            distanceAlongPathM: typeof item.distanceAlongPathM === 'number' ? item.distanceAlongPathM : null,
-                            status: item.status || st.status || ""
+                            distanceAlongPathM: typeof item.distanceAlongPathM === 'number' ? item.distanceAlongPathM : null
                         };
                     }
                     return null;
                 }).filter(s => s && s.coord);
-
                 if (resolved.length > 0) return resolved;
             }
 
-            // 情況 2：route.stops[directionKey] 或 route.stops[patternId]
             if (route.stops && !Array.isArray(route.stops)) {
                 const list = route.stops[directionKey] || route.stops[patternId];
                 if (Array.isArray(list)) {
@@ -302,51 +346,31 @@
                         id: s.id || `s_${idx}`,
                         name: s.name || `第 ${idx + 1} 站`,
                         coord: extractStopCoord(s),
-                        distanceAlongPathM: s.distanceAlongPathM ?? null,
-                        status: s.status || ""
+                        distanceAlongPathM: s.distanceAlongPathM ?? null
                     })).filter(s => s.coord);
                 }
             }
-
             return [];
         }
 
-        // 萬用班次解析器：從 route.trips / pattern.trips / 頂層 trips 萃取班次
         function getTripsForDirection(route, directionKey) {
             const pattern = route.patterns ? route.patterns[directionKey] : null;
             const patternId = pattern ? (pattern.id || directionKey) : directionKey;
             const routeId = route.id || route.code;
 
-            // 1. 直接掛在 pattern 底下
             if (pattern && Array.isArray(pattern.trips)) return pattern.trips;
-
-            // 2. 掛在 route.trips 底下
             if (route.trips) {
-                if (!Array.isArray(route.trips)) {
-                    return route.trips[directionKey] || route.trips[patternId] || [];
-                }
-                const matched = route.trips.filter(t =>
-                    t.patternId === patternId ||
-                    t.patternId === directionKey ||
-                    t.direction === directionKey
-                );
+                if (!Array.isArray(route.trips)) return route.trips[directionKey] || route.trips[patternId] || [];
+                const matched = route.trips.filter(t => t.patternId === patternId || t.patternId === directionKey || t.direction === directionKey);
                 if (matched.length > 0) return matched;
-                // 若該路線只有一個方向或班次沒標 patternId，回傳全部
                 if (Object.keys(route.patterns).length === 1) return route.trips;
             }
-
-            // 3. 掛在頂層 rawNetworkData.trips 底下
             if (rawNetworkData && Array.isArray(rawNetworkData.trips)) {
-                return rawNetworkData.trips.filter(t =>
-                    t.patternId === patternId ||
-                    (t.routeId === routeId && (t.direction === directionKey || t.patternId === directionKey))
-                );
+                return rawNetworkData.trips.filter(t => t.patternId === patternId || (t.routeId === routeId && (t.direction === directionKey || t.patternId === directionKey)));
             }
-
             return [];
         }
 
-        // 萬用時間配置解析器（timingProfiles）
         function getTimingProfileForDirection(route, directionKey, sampleTrip) {
             const pattern = route.patterns ? route.patterns[directionKey] : null;
             const patternId = pattern ? (pattern.id || directionKey) : directionKey;
@@ -365,6 +389,208 @@
             return null;
         }
 
+        // ==========================================
+        // 首頁視圖渲染（客運公司分類 + 班次卡片）
+        // ==========================================
+        function renderOperatorFilterTabs() {
+            const operators = ["ALL", ...new Set(allRoutesData.map(r => getOperatorName(r)))];
+            const container = document.getElementById('operator-filter-tabs');
+            container.innerHTML = '';
+
+            operators.forEach(op => {
+                const btn = document.createElement('button');
+                const isActive = op === selectedOperatorFilter;
+                btn.className = isActive
+                    ? "px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black shadow-sm transition"
+                    : "px-4 py-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 text-xs font-bold transition";
+                btn.textContent = op === "ALL" ? "全部客運業者" : op;
+                btn.onclick = () => {
+                    selectedOperatorFilter = op;
+                    renderOperatorFilterTabs();
+                    renderHomeOperators();
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function renderHomeOperators() {
+            const container = document.getElementById('operators-container');
+            const keyword = (document.getElementById('route-search-input').value || '').trim().toLowerCase();
+            container.innerHTML = '';
+
+            // 依客運業者分組
+            const grouped = {};
+            allRoutesData.forEach((route, idx) => {
+                const op = getOperatorName(route);
+                if (selectedOperatorFilter !== "ALL" && op !== selectedOperatorFilter) return;
+
+                const rKey = getRouteKey(route, idx).replace('hualien_', '');
+                const rName = route.name || rKey;
+                if (keyword && !rKey.toLowerCase().includes(keyword) && !rName.toLowerCase().includes(keyword)) return;
+
+                if (!grouped[op]) grouped[op] = [];
+                grouped[op].push({ route, rKey });
+            });
+
+            const operatorNames = Object.keys(grouped);
+            if (operatorNames.length === 0) {
+                container.innerHTML = `<div class="bg-white rounded-3xl p-12 text-center text-slate-400 font-bold text-sm">找不到符合條件的客運路線</div>`;
+                return;
+            }
+
+            operatorNames.forEach(opName => {
+                const section = document.createElement('div');
+                section.className = "space-y-4";
+
+                section.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <span class="w-2 h-6 bg-emerald-500 rounded-full"></span>
+                        <h3 class="text-lg font-black text-slate-800">${opName}</h3>
+                        <span class="text-xs font-bold text-slate-400 bg-white px-2.5 py-0.5 rounded-full border border-slate-200">共 ${grouped[opName].length} 條路線</span>
+                    </div>
+                `;
+
+                const grid = document.createElement('div');
+                grid.className = "grid grid-cols-1 md:grid-cols-2 gap-5";
+
+                grouped[opName].forEach(({ route, rKey }) => {
+                    const card = document.createElement('div');
+                    card.className = "bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md hover:shadow-lg transition space-y-4 flex flex-col justify-between";
+
+                    const dirs = Object.keys(route.patterns);
+                    let dirsHtml = '';
+
+                    dirs.forEach(dir => {
+                        const headsign = route.patterns[dir]?.headsign || (dir === 'outbound' ? '去程' : '返程');
+                        const trips = [...getTripsForDirection(route, dir)].sort((a, b) => Number(a.startSec ?? 0) - Number(b.startSec ?? 0));
+
+                        let tripBtns = '';
+                        if (trips.length === 0) {
+                            tripBtns = `<span class="text-xs text-slate-400">無固定班次資料</span>`;
+                        } else {
+                            trips.forEach((t, tIdx) => {
+                                const startSec = Number(t.startSec ?? t.departureSec ?? 0);
+                                const timeLabel = secToTimeStr(startSec);
+                                // 將參數編碼存入 data 屬性
+                                tripBtns += `
+                                    <button onclick="startTripSimulation('${getRouteKey(route)}', '${dir}', ${tIdx})"
+                                        class="px-3 py-1.5 rounded-xl bg-slate-50 hover:bg-emerald-500 hover:text-slate-950 border border-slate-200 hover:border-emerald-500 font-mono text-xs font-black text-slate-700 transition shadow-sm flex items-center space-x-1">
+                                        <span>${timeLabel}</span>
+                                    </button>
+                                `;
+                            });
+                        }
+
+                        dirsHtml += `
+                            <div class="space-y-2 pt-2 border-t border-slate-100">
+                                <div class="text-xs font-extrabold text-slate-500 flex items-center justify-between">
+                                    <span><i class="fa-solid fa-arrow-right text-emerald-500 mr-1.5"></i>往 ${headsign}</span>
+                                    <span class="text-[11px] text-slate-400">${trips.length} 班次</span>
+                                </div>
+                                <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto no-scrollbar">
+                                    ${tripBtns}
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    card.innerHTML = `
+                        <div class="space-y-3">
+                            <div class="flex items-start justify-between gap-2">
+                                <div>
+                                    <span class="inline-block text-white text-xs font-black px-2.5 py-1 rounded-lg mb-1.5" style="background:${route.color || '#1e293b'}">${rKey} 路</span>
+                                    <h4 class="font-black text-base text-slate-800 leading-snug">${route.name || rKey}</h4>
+                                </div>
+                            </div>
+                            ${dirsHtml}
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+
+                section.appendChild(grid);
+                container.appendChild(section);
+            });
+        }
+
+        // ==========================================
+        // 進入視圖 2：單一班次專屬模擬器
+        // ==========================================
+        function startTripSimulation(fullRouteKey, directionKey, sortedTripIndex) {
+            const route = allRoutesData.find((r, idx) => getRouteKey(r, idx) === fullRouteKey);
+            if (!route) return;
+
+            const trips = [...getTripsForDirection(route, directionKey)].sort((a, b) => Number(a.startSec ?? 0) - Number(b.startSec ?? 0));
+            const trip = trips[sortedTripIndex];
+            if (!trip) return;
+
+            const startSec = Number(trip.startSec ?? trip.departureSec ?? 0);
+            const metrics = getPathMetrics(fullRouteKey, directionKey, route.patterns[directionKey].path);
+            const profile = getTimingProfileForDirection(route, directionKey, trip);
+
+            let durationSec = Math.max(1200, Math.round(metrics.totalDist / 8.33));
+            if (Array.isArray(profile) && profile.length > 0) {
+                const last = profile[profile.length - 1];
+                durationSec = (last.arrivalOffsetSec ?? last.departureOffsetSec ?? durationSec);
+            }
+            const endSec = startSec + durationSec;
+
+            activeSim = {
+                route,
+                routeKey: fullRouteKey,
+                directionKey,
+                trip,
+                startSec,
+                endSec
+            };
+
+            // 切換視圖顯示
+            document.getElementById('home-view').classList.add('hidden');
+            document.getElementById('sim-view').classList.remove('hidden');
+            document.getElementById('btn-back-home').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            // 初始化地圖並修正尺寸
+            initMap();
+            setTimeout(() => leafletMap.invalidateSize(), 100);
+
+            // 更新班次資訊卡
+            const headsign = route.patterns[directionKey]?.headsign || (directionKey === 'outbound' ? '去程' : '返程');
+            document.getElementById('sim-operator-badge').innerText = getOperatorName(route);
+            document.getElementById('sim-route-badge').innerText = `${fullRouteKey.replace('hualien_', '')} 路`;
+            document.getElementById('sim-route-badge').style.backgroundColor = route.color || '#2563eb';
+            document.getElementById('sim-route-title').innerText = `${route.name}（往 ${headsign}）`;
+            document.getElementById('sim-trip-start-label').innerText = secToTimeStr(startSec);
+            document.getElementById('sim-trip-end-label').innerText = secToTimeStr(endSec);
+
+            // 設定時間軸範圍（從發車前 2 分鐘 到 抵達終點後 2 分鐘，方便完整觀察全程）
+            const sliderMin = Math.max(0, startSec - 120);
+            const sliderMax = Math.min(86399, endSec + 120);
+            const slider = document.getElementById('time-slider');
+            slider.min = sliderMin;
+            slider.max = sliderMax;
+            document.getElementById('slider-label-start').innerText = secToTimeStr(sliderMin);
+            document.getElementById('slider-label-end').innerText = secToTimeStr(sliderMax);
+
+            // 起始時間設為發車當下，並自動開始播放模擬
+            simTimeSec = startSec;
+            renderStaticRouteAndStops();
+            renderStopTimelineList();
+            updateClockUI();
+
+            if (!isPlaying) togglePlay();
+        }
+
+        function goHome() {
+            if (isPlaying) togglePlay();
+            document.getElementById('sim-view').classList.add('hidden');
+            document.getElementById('btn-back-home').classList.add('hidden');
+            document.getElementById('home-view').classList.remove('hidden');
+        }
+
+        // ==========================================
+        // 幾何與模擬計算引擎
+        // ==========================================
         function calcDistanceM(lat1, lon1, lat2, lon2) {
             const R = 6371000;
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -377,7 +603,7 @@
             const key = `${routeKey}_${direction}`;
             if (pathMetricsCache[key]) return pathMetricsCache[key];
 
-            const path = rawPath.map(toLatLng).filter(Boolean);
+            const path = (rawPath || []).map(toLatLng).filter(Boolean);
             const cumDist = [0];
             let total = 0;
             for (let i = 1; i < path.length; i++) {
@@ -390,6 +616,7 @@
 
         function getCoordAtDistance(metrics, targetDist) {
             const { path, cumDist, totalDist } = metrics;
+            if (!path.length) return [23.987, 121.601];
             if (targetDist <= 0) return path[0];
             if (targetDist >= totalDist) return path[path.length - 1];
 
@@ -406,39 +633,44 @@
             return path[path.length - 1];
         }
 
-        function getBusPositionForTrip(route, routeKey, direction, trip, nowSec) {
-            const pattern = route.patterns[direction];
-            const stops = getStopsForDirection(route, direction);
-            if (!pattern || !Array.isArray(pattern.path) || pattern.path.length < 2) return null;
+        function getSingleTripPosition(nowSec) {
+            const { route, routeKey, directionKey, trip, startSec, endSec } = activeSim;
+            if (!route) return null;
 
-            const startSec = Number(trip.startSec ?? trip.departureSec ?? trip.startTimeSec);
-            if (isNaN(startSec)) return null;
+            const pattern = route.patterns[directionKey];
+            const stops = getStopsForDirection(route, directionKey);
+            const metrics = getPathMetrics(routeKey, directionKey, pattern.path);
+            const profile = getTimingProfileForDirection(route, directionKey, trip);
 
-            const metrics = getPathMetrics(routeKey, direction, pattern.path);
-            const profile = getTimingProfileForDirection(route, direction, trip);
+            if (nowSec < startSec) {
+                return {
+                    coord: metrics.path[0],
+                    statusText: `尚未發車（距發車還有 ${Math.ceil(startSec - nowSec)} 秒）`,
+                    activeStopIdx: 0
+                };
+            }
+            if (nowSec > endSec) {
+                return {
+                    coord: metrics.path[metrics.path.length - 1],
+                    statusText: `已抵達終點站：${stops[stops.length - 1]?.name || '終點'}`,
+                    activeStopIdx: stops.length - 1
+                };
+            }
 
-            // 1. 若有完整的 timingProfiles（精準到站/離站秒數）
             if (Array.isArray(profile) && profile.length > 0) {
-                const firstDep = startSec + (profile[0].departureOffsetSec ?? profile[0].arrivalOffsetSec ?? 0);
-                const lastEntry = profile[profile.length - 1];
-                const lastArr = startSec + (lastEntry.arrivalOffsetSec ?? lastEntry.departureOffsetSec ?? 0);
-
-                if (nowSec < firstDep || nowSec > lastArr) return null;
-
                 for (let i = 0; i < profile.length; i++) {
                     const pNow = profile[i];
                     const arrTime = startSec + (pNow.arrivalOffsetSec ?? 0);
                     const depTime = startSec + (pNow.departureOffsetSec ?? arrTime);
-
                     const distHere = (stops[i] && typeof stops[i].distanceAlongPathM === 'number')
                         ? stops[i].distanceAlongPathM
                         : (metrics.totalDist * (i / Math.max(1, profile.length - 1)));
 
                     if (nowSec >= arrTime && nowSec <= depTime) {
-                        const stopName = stops[i] ? stops[i].name : `第 ${i + 1} 站`;
                         return {
                             coord: getCoordAtDistance(metrics, distHere),
-                            statusText: `停靠中：${stopName}`
+                            statusText: `靠站上下客：${stops[i]?.name || `第 ${i + 1} 站`}`,
+                            activeStopIdx: i
                         };
                     }
 
@@ -449,77 +681,151 @@
                             const distNext = (stops[i + 1] && typeof stops[i + 1].distanceAlongPathM === 'number')
                                 ? stops[i + 1].distanceAlongPathM
                                 : (metrics.totalDist * ((i + 1) / Math.max(1, profile.length - 1)));
-
                             const ratio = (nextArr > depTime) ? (nowSec - depTime) / (nextArr - depTime) : 0;
-                            const currentDist = distHere + (distNext - distHere) * ratio;
-                            const nextName = stops[i + 1] ? stops[i + 1].name : `第 ${i + 2} 站`;
                             return {
-                                coord: getCoordAtDistance(metrics, currentDist),
-                                statusText: `前往：${nextName}`
+                                coord: getCoordAtDistance(metrics, distHere + (distNext - distHere) * ratio),
+                                statusText: `行駛中，下一站：${stops[i + 1]?.name || `第 ${i + 2} 站`}`,
+                                activeStopIdx: i + 1
                             };
                         }
                     }
                 }
-            } else {
-                // 2. 備援估算：依道路總長推估行駛時間（平均時速 30km/h，至少 20 分鐘）
-                const estDuration = Math.max(1200, Math.round(metrics.totalDist / 8.33));
-                if (nowSec < startSec || nowSec > startSec + estDuration) return null;
-                const ratio = (nowSec - startSec) / estDuration;
-                const stopIdx = stops.length > 0 ? Math.min(stops.length - 1, Math.floor(ratio * stops.length)) : 0;
-                const nearName = stops[stopIdx] ? stops[stopIdx].name : "路線途中";
-                return {
-                    coord: getCoordAtDistance(metrics, metrics.totalDist * ratio),
-                    statusText: `行駛中（約近 ${nearName}）`
-                };
             }
-            return null;
+
+            const ratio = (nowSec - startSec) / Math.max(1, endSec - startSec);
+            const idx = stops.length > 0 ? Math.min(stops.length - 1, Math.floor(ratio * stops.length)) : 0;
+            return {
+                coord: getCoordAtDistance(metrics, metrics.totalDist * ratio),
+                statusText: `行駛中（約近 ${stops[idx]?.name || '路線途中'}）`,
+                activeStopIdx: idx
+            };
         }
 
-        function getCurrentRoute() {
-            return allRoutesData.find((r, idx) => getRouteKey(r, idx) === currentRouteKey);
-        }
-
-        function updateSimulatedBuses() {
-            if (!busMarkersLayer) return;
+        function updateSimulatedBus() {
+            if (!busMarkersLayer || !activeSim.route) return;
             busMarkersLayer.clearLayers();
 
-            const route = getCurrentRoute();
-            if (!route) return;
+            const pos = getSingleTripPosition(simTimeSec);
+            if (!pos) return;
 
-            let activeCount = 0;
-            const dirs = Object.keys(route.patterns);
+            document.getElementById('sim-live-status').innerText = pos.statusText;
 
-            dirs.forEach((dir, dIdx) => {
-                const trips = getTripsForDirection(route, dir);
-                const badgeColor = dIdx === 0 ? "#2563eb" : "#059669";
-                const dirLabel = (route.patterns[dir] && route.patterns[dir].headsign) ? route.patterns[dir].headsign : (dir === "outbound" ? "去程" : "返程");
-
-                trips.forEach(trip => {
-                    const pos = getBusPositionForTrip(route, currentRouteKey, dir, trip, simTimeSec);
-                    if (pos) {
-                        activeCount++;
-                        const busIcon = L.divIcon({
-                            className: 'bus-marker-icon',
-                            html: `<div class="bus-badge" style="background:${badgeColor};"><i class="fa-solid fa-bus"></i></div>`,
-                            iconSize: [30, 30],
-                            iconAnchor: [15, 15]
-                        });
-
-                        const startSec = Number(trip.startSec ?? trip.departureSec ?? 0);
-                        const marker = L.marker(pos.coord, { icon: busIcon, zIndexOffset: 1000 });
-                        marker.bindPopup(`
-                            <div style="font-family:sans-serif;">
-                                <span style="background:${badgeColor};color:white;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:bold;">${currentRouteKey.replace('hualien_', '')} · ${dirLabel}</span>
-                                <div style="font-size:14px;font-weight:900;margin-top:4px;color:#0f172a;">${pos.statusText}</div>
-                                <div style="font-size:11px;color:#64748b;margin-top:2px;">起站發車：${secToTimeStr(startSec)}</div>
-                            </div>
-                        `);
-                        marker.addTo(busMarkersLayer);
-                    }
-                });
+            const badgeColor = activeSim.route.color || "#2563eb";
+            const busIcon = L.divIcon({
+                className: 'bus-marker-icon',
+                html: `<div class="bus-badge" style="background:${badgeColor};"><i class="fa-solid fa-bus"></i></div>`,
+                iconSize: [34, 34],
+                iconAnchor: [17, 17]
             });
 
-            document.getElementById('active-bus-count').innerText = `此路線行駛中：${activeCount} 輛`;
+            const marker = L.marker(pos.coord, { icon: busIcon, zIndexOffset: 1000 });
+            marker.bindPopup(`
+                <div style="font-family:sans-serif;">
+                    <div style="font-size:11px;font-weight:bold;color:#64748b;">${activeSim.routeKey.replace('hualien_', '')} 路 · ${secToTimeStr(activeSim.startSec)} 班次</div>
+                    <div style="font-size:14px;font-weight:900;color:#0f172a;margin-top:2px;">${pos.statusText}</div>
+                </div>
+            `);
+            marker.addTo(busMarkersLayer);
+        }
+
+        function renderStopTimelineList() {
+            const { route, directionKey, trip, startSec, endSec } = activeSim;
+            const stops = getStopsForDirection(route, directionKey);
+            const profile = getTimingProfileForDirection(route, directionKey, trip);
+            const container = document.getElementById('stop-timeline-list');
+            container.innerHTML = '';
+
+            stops.forEach((st, idx) => {
+                let estSec = startSec + Math.round((endSec - startSec) * (idx / Math.max(1, stops.length - 1)));
+                if (Array.isArray(profile) && profile[idx]) {
+                    estSec = startSec + (profile[idx].arrivalOffsetSec ?? profile[idx].departureOffsetSec ?? 0);
+                }
+
+                const item = document.createElement('div');
+                item.className = "p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex justify-between items-center hover:border-emerald-500 cursor-pointer transition text-xs";
+                item.title = "點擊將時間跳轉至公車抵達此站時刻";
+                item.onclick = () => {
+                    simTimeSec = estSec;
+                    updateClockUI();
+                };
+                item.innerHTML = `
+                    <div class="flex items-center space-x-2.5 truncate">
+                        <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-700 text-[10px] font-mono font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
+                        <span class="font-bold text-slate-800 truncate">${st.name}</span>
+                    </div>
+                    <span class="font-mono font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md shrink-0">${secToTimeStr(estSec)}</span>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function clearStaticLayers() {
+            staticLayers.forEach(l => leafletMap.removeLayer(l));
+            labelMarkers.forEach(l => leafletMap.removeLayer(l));
+            staticLayers = [];
+            labelMarkers = [];
+        }
+
+        function renderStaticRouteAndStops() {
+            clearStaticLayers();
+            const { route, directionKey } = activeSim;
+            if (!route) return;
+
+            const pattern = route.patterns[directionKey];
+            const stops = getStopsForDirection(route, directionKey);
+            const lineColor = route.color || "#2563eb";
+
+            if (pattern && Array.isArray(pattern.path) && pattern.path.length > 0) {
+                const correctedPath = pattern.path.map(toLatLng).filter(Boolean);
+                const polyline = L.polyline(correctedPath, {
+                    color: lineColor,
+                    weight: 5,
+                    opacity: 0.85
+                }).addTo(leafletMap);
+                staticLayers.push(polyline);
+                leafletMap.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+            }
+
+            const showLabels = document.getElementById('toggle-labels').checked;
+            stops.forEach((st, idx) => {
+                if (!st.coord) return;
+                const [lat, lng] = st.coord;
+                const isTerminal = idx === 0 || idx === stops.length - 1;
+
+                const circle = L.circleMarker([lat, lng], {
+                    radius: isTerminal ? 8 : 5,
+                    fillColor: isTerminal ? lineColor : '#ffffff',
+                    color: lineColor,
+                    weight: 2.5,
+                    fillOpacity: 1
+                }).addTo(leafletMap);
+
+                circle.bindPopup(`
+                    <div style="font-family:sans-serif;">
+                        <div style="font-size:10px;color:#64748b;font-weight:bold;">站序 #${idx + 1}</div>
+                        <div style="font-size:14px;font-weight:900;color:#0f172a;">${st.name}</div>
+                    </div>
+                `);
+                staticLayers.push(circle);
+
+                const labelIcon = L.divIcon({
+                    className: 'station-label-icon',
+                    html: `<div class="station-badge">${idx + 1}. ${st.name}</div>`,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                });
+                const lblMarker = L.marker([lat, lng], { icon: labelIcon, interactive: false });
+                if (showLabels) lblMarker.addTo(leafletMap);
+                labelMarkers.push(lblMarker);
+            });
+        }
+
+        function toggleStationLabels() {
+            const show = document.getElementById('toggle-labels').checked;
+            labelMarkers.forEach(lbl => {
+                if (show) lbl.addTo(leafletMap);
+                else leafletMap.removeLayer(lbl);
+            });
         }
 
         function secToTimeStr(totalSec, includeSec = false) {
@@ -533,7 +839,7 @@
         function updateClockUI() {
             document.getElementById('sim-clock-display').innerText = secToTimeStr(simTimeSec, true);
             document.getElementById('time-slider').value = Math.floor(simTimeSec);
-            updateSimulatedBuses();
+            updateSimulatedBus();
         }
 
         function onSliderChange(val) {
@@ -562,7 +868,7 @@
                 requestAnimationFrame(animationLoop);
             } else {
                 icon.className = "fa-solid fa-play mr-1.5";
-                text.innerText = "開始模擬";
+                text.innerText = "繼續模擬";
             }
         }
 
@@ -572,180 +878,16 @@
             lastFrameTimestamp = timestamp;
 
             simTimeSec += dt * simSpeed;
-            if (simTimeSec >= 86400) simTimeSec -= 86400;
+            const maxSec = Number(document.getElementById('time-slider').max);
+            if (simTimeSec > maxSec) {
+                simTimeSec = Number(document.getElementById('time-slider').min);
+            }
 
             updateClockUI();
             requestAnimationFrame(animationLoop);
         }
 
-        function clearStaticLayers() {
-            staticLayers.forEach(l => leafletMap.removeLayer(l));
-            labelMarkers.forEach(l => leafletMap.removeLayer(l));
-            staticLayers = [];
-            labelMarkers = [];
-        }
-
-        function renderStaticRouteAndStops() {
-            clearStaticLayers();
-            const route = getCurrentRoute();
-            if (!route) return;
-
-            const pattern = route.patterns[currentDirectionKey];
-            const stops = getStopsForDirection(route, currentDirectionKey);
-            const lineColor = route.color || "#2563eb";
-
-            if (pattern && Array.isArray(pattern.path) && pattern.path.length > 0) {
-                const correctedPath = pattern.path.map(toLatLng).filter(Boolean);
-                const polyline = L.polyline(correctedPath, {
-                    color: lineColor,
-                    weight: 5,
-                    opacity: 0.8
-                }).addTo(leafletMap);
-                staticLayers.push(polyline);
-                leafletMap.fitBounds(polyline.getBounds(), { padding: [40, 40] });
-            }
-
-            const showLabels = document.getElementById('toggle-labels').checked;
-            stops.forEach((st, idx) => {
-                if (!st.coord) return;
-                const [lat, lng] = st.coord;
-                const isTerminal = idx === 0 || idx === stops.length - 1;
-
-                const circle = L.circleMarker([lat, lng], {
-                    radius: isTerminal ? 8 : 5,
-                    fillColor: isTerminal ? lineColor : '#ffffff',
-                    color: lineColor,
-                    weight: 2.5,
-                    fillOpacity: 1
-                }).addTo(leafletMap);
-
-                circle.bindPopup(`
-                    <div style="font-family:sans-serif;">
-                        <div style="font-size:10px;color:#64748b;font-weight:bold;">站序 #${idx + 1} ${st.status ? `(${st.status})` : ''}</div>
-                        <div style="font-size:14px;font-weight:900;color:#0f172a;">${st.name}</div>
-                        <div style="font-size:10px;font-family:monospace;color:#2563eb;margin-top:4px;">${lat.toFixed(6)}, ${lng.toFixed(6)}</div>
-                    </div>
-                `);
-                staticLayers.push(circle);
-
-                const labelIcon = L.divIcon({
-                    className: 'station-label-icon',
-                    html: `<div class="station-badge">${idx + 1}. ${st.name}</div>`,
-                    iconSize: [0, 0],
-                    iconAnchor: [0, 0]
-                });
-                const lblMarker = L.marker([lat, lng], { icon: labelIcon, interactive: false });
-                if (showLabels) lblMarker.addTo(leafletMap);
-                labelMarkers.push(lblMarker);
-            });
-        }
-
-        function toggleStationLabels() {
-            const show = document.getElementById('toggle-labels').checked;
-            labelMarkers.forEach(lbl => {
-                if (show) lbl.addTo(leafletMap);
-                else leafletMap.removeLayer(lbl);
-            });
-        }
-
-        function renderRouteButtons() {
-            const grid = document.getElementById('route-buttons-grid');
-            grid.innerHTML = '';
-            allRoutesData.forEach((r, idx) => {
-                const rKey = getRouteKey(r, idx);
-                const btn = document.createElement('button');
-                const isActive = rKey === currentRouteKey;
-                btn.className = isActive
-                    ? "py-2 px-3.5 rounded-xl font-black text-xs transition border shadow-md bg-slate-900 text-white border-slate-900"
-                    : "py-2 px-3.5 rounded-xl font-bold text-xs transition border shadow-sm bg-white text-slate-700 hover:bg-slate-50 border-slate-200";
-                btn.textContent = rKey.replace('hualien_', '');
-                btn.onclick = () => {
-                    currentRouteKey = rKey;
-                    const dirs = Object.keys(r.patterns);
-                    if (!dirs.includes(currentDirectionKey)) {
-                        currentDirectionKey = dirs[0];
-                    }
-                    updateDisplay();
-                };
-                grid.appendChild(btn);
-            });
-        }
-
-        function renderDirectionTabs(route) {
-            const container = document.getElementById('direction-tabs');
-            container.innerHTML = '';
-            const dirs = Object.keys(route.patterns);
-            dirs.forEach(dir => {
-                const btn = document.createElement('button');
-                const isSelected = dir === currentDirectionKey;
-                btn.className = isSelected
-                    ? "px-4 py-2 rounded-xl bg-white text-emerald-600 shadow-sm font-black"
-                    : "px-4 py-2 rounded-xl text-slate-600 hover:text-slate-900";
-                const label = (route.patterns[dir] && route.patterns[dir].headsign)
-                    ? route.patterns[dir].headsign
-                    : (dir === "outbound" ? "去程" : dir === "inbound" ? "返程" : dir);
-                btn.textContent = `【${label}】`;
-                btn.onclick = () => {
-                    currentDirectionKey = dir;
-                    updateDisplay();
-                };
-                container.appendChild(btn);
-            });
-        }
-
-        function renderSchedules() {
-            const route = getCurrentRoute();
-            if (!route) return;
-
-            const trips = getTripsForDirection(route, currentDirectionKey);
-            const stops = getStopsForDirection(route, currentDirectionKey);
-            const container = document.getElementById('schedule-list');
-
-            document.getElementById('route-code-badge').innerText = `${currentRouteKey.replace('hualien_', '')} 路線`;
-            document.getElementById('route-code-badge').style.backgroundColor = route.color || '#1e293b';
-            document.getElementById('route-title').innerText = route.name || currentRouteKey;
-            const pathCount = (route.patterns[currentDirectionKey]?.path || []).length;
-            document.getElementById('route-desc').innerText = `本方向共 ${stops.length} 個站牌、道路折線由 ${pathCount} 個經緯度頂點構成`;
-
-            container.innerHTML = '';
-            if (trips.length === 0) {
-                container.innerHTML = `<div class="text-center text-xs text-slate-400 py-8">此方向無班次資料</div>`;
-                return;
-            }
-
-            const sortedTrips = [...trips].sort((a, b) => Number(a.startSec ?? 0) - Number(b.startSec ?? 0));
-            sortedTrips.forEach((trip, i) => {
-                const startSec = Number(trip.startSec ?? trip.departureSec ?? 0);
-                const timeStr = secToTimeStr(startSec);
-                const item = document.createElement('div');
-                item.className = "p-3 rounded-2xl bg-slate-50 border border-slate-200 flex justify-between items-center hover:border-emerald-500 hover:bg-emerald-50/40 cursor-pointer transition shadow-sm";
-                item.onclick = () => {
-                    simTimeSec = startSec + 30;
-                    updateClockUI();
-                };
-                item.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <span class="w-6 h-6 rounded-full bg-slate-200 text-slate-600 text-[11px] font-mono font-bold flex items-center justify-center">${i + 1}</span>
-                        <span class="text-base font-black text-slate-800 font-mono">${timeStr}</span>
-                    </div>
-                    <span class="text-xs font-bold text-blue-600 bg-blue-100/70 px-2.5 py-1 rounded-lg"><i class="fa-solid fa-location-crosshairs mr-1"></i>跳轉模擬</span>
-                `;
-                container.appendChild(item);
-            });
-        }
-
-        function updateDisplay() {
-            const route = getCurrentRoute();
-            if (!route) return;
-            renderRouteButtons();
-            renderDirectionTabs(route);
-            renderSchedules();
-            renderStaticRouteAndStops();
-            updateSimulatedBuses();
-        }
-
         window.onload = () => {
-            initMap();
             loadNetworkData();
         };
     </script>
