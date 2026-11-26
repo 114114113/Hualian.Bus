@@ -24,7 +24,7 @@
         .tabular-nums { font-variant-numeric: tabular-nums; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        #leaflet-map-box { height: 560px; width: 100%; border-radius: 1.25rem; z-index: 10; }
+        #leaflet-map-box { height: 560px; width: 100%; border-radius: 1.25rem; z-index: 10; background-color: #e2e8f0; }
 
         /* 精品級微光卡片 */
         .luxe-card {
@@ -451,21 +451,20 @@
             if (leafletMap) return;
             leafletMap = L.map('leaflet-map-box', { zoomControl: true }).setView([23.987, 121.601], 13);
 
-            // 高質感精簡底圖（CartoDB Voyager）為主，並提供台灣詳細電子地圖切換
-            const voyagerLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-                maxZoom: 19,
-                subdomains: 'abcd',
-                attribution: '&copy; OpenStreetMap &copy; CARTO'
-            });
-
+            // 使用原本穩定載入的內政部國土測繪中心台灣通用電子地圖為主底圖，並提供 OpenStreetMap 切換備援
             const nlscLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
                 maxZoom: 19,
                 attribution: '&copy; 內政部國土測繪中心'
             });
 
-            voyagerLayer.addTo(leafletMap);
+            const osmLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            });
+
+            nlscLayer.addTo(leafletMap);
             L.control.layers(
-                { "精簡高質感底圖": voyagerLayer, "台灣詳細門牌地圖": nlscLayer },
+                { "台灣通用電子地圖": nlscLayer, "標準街道地圖 (OSM)": osmLayer },
                 null,
                 { position: 'topright' }
             ).addTo(leafletMap);
@@ -629,7 +628,7 @@
         }
 
         // ==========================================
-        // 首頁視圖渲染（精品克制風格）
+        // 首頁視圖渲染
         // ==========================================
         function renderOperatorFilterTabs() {
             const operators = ["ALL", ...new Set(allRoutesData.map(r => getOperatorName(r)))];
@@ -976,7 +975,6 @@
             document.getElementById('btn-back-home').classList.remove('hidden');
 
             initMap();
-            setTimeout(() => leafletMap.invalidateSize(), 100);
 
             const headsign = route.patterns[directionKey]?.headsign || (directionKey === 'outbound' ? '去程' : '返程');
             const opBadge = document.getElementById('sim-operator-badge');
@@ -992,7 +990,6 @@
             document.getElementById('map-title-icon').style.color = theme.primary;
             document.getElementById('timeline-stop-count').innerText = `共 ${segments.length} 站`;
 
-            // 設定進度條起訖站名與配色
             if (segments.length > 0) {
                 document.getElementById('sim-progress-start').innerText = segments[0].name;
                 document.getElementById('sim-progress-end').innerText = segments[segments.length - 1].name;
@@ -1013,9 +1010,19 @@
             }
             updateSpeedButtonsUI();
 
+            // 確保容器顯示後立即校正地圖尺寸並繪製路線
+            leafletMap.invalidateSize();
             renderStaticRouteAndStops();
             renderStopTimelineList();
             updateSimulatedBus();
+
+            setTimeout(() => {
+                if (leafletMap) {
+                    leafletMap.invalidateSize();
+                    renderStaticRouteAndStops();
+                    updateSimulatedBus();
+                }
+            }, 150);
 
             if (!isPlaying) {
                 isPlaying = true;
@@ -1279,7 +1286,6 @@
                     if (nameEl) nameEl.style.color = "#0f172a";
                     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else if (idx < stopIdx) {
-                    // 已通過站點呈現沉穩微淡質感
                     el.style.borderColor = "transparent";
                     el.style.backgroundColor = "transparent";
                     el.style.opacity = "0.52";
@@ -1320,7 +1326,6 @@
             const pos = getSingleTripPosition(simTimeSec);
             if (!pos) return;
 
-            // 更新行程總進度條
             const pct = pos.progressPct ?? 0;
             const barEl = document.getElementById('sim-progress-bar');
             const pctEl = document.getElementById('sim-progress-pct');
@@ -1440,7 +1445,6 @@
             if (pattern && Array.isArray(pattern.path) && pattern.path.length > 0) {
                 const correctedPath = pattern.path.map(toLatLng).filter(Boolean);
 
-                // 外層柔和光暈軌跡
                 const glowLine = L.polyline(correctedPath, {
                     color: lineColor,
                     weight: 11,
@@ -1450,7 +1454,6 @@
                 }).addTo(leafletMap);
                 staticLayers.push(glowLine);
 
-                // 內層核心路線軌跡
                 const polyline = L.polyline(correctedPath, {
                     color: lineColor,
                     weight: 4.5,
