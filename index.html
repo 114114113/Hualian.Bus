@@ -15,47 +15,70 @@
     <style>
         body {
             font-family: 'Inter', 'Noto Sans TC', sans-serif;
-            background-color: #f4f6f9;
+            background-color: #f1f5f9;
+            background-image: radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.04) 0px, transparent 50%),
+                              radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.04) 0px, transparent 50%);
             -webkit-font-smoothing: antialiased;
+            font-variant-numeric: tabular-nums;
         }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        #leaflet-map-box { height: 580px; width: 100%; border-radius: 1.25rem; z-index: 10; }
+        #leaflet-map-box { height: 560px; width: 100%; border-radius: 1.25rem; z-index: 10; }
 
-        .premium-card {
-            background: #ffffff;
-            border: 1px solid rgba(226, 232, 240, 0.85);
-            box-shadow: 0 4px 20px -4px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        /* 精品級微光卡片 */
+        .luxe-card {
+            background: rgba(255, 255, 255, 0.94);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03),
+                        0 8px 24px -6px rgba(15, 23, 42, 0.05),
+                        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+            transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+                        box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+                        border-color 0.25s ease;
         }
-        .premium-card-hover:hover {
+        .luxe-card-hover:hover {
             transform: translateY(-2px);
-            box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.09), 0 2px 6px rgba(15, 23, 42, 0.04);
+            border-color: rgba(203, 213, 225, 1);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04),
+                        0 16px 32px -8px rgba(15, 23, 42, 0.09),
+                        inset 0 1px 0 rgba(255, 255, 255, 1);
+        }
+
+        /* Leaflet 圖層控制器微調 */
+        .leaflet-control-layers {
+            border-radius: 12px !important;
+            border: 1px solid rgba(226, 232, 240, 0.9) !important;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08) !important;
+            font-family: 'Inter', 'Noto Sans TC', sans-serif !important;
+            font-size: 11px !important;
+            font-weight: 600 !important;
         }
 
         .station-label-icon { background: transparent; border: none; }
         .station-badge {
-            background: rgba(15, 23, 42, 0.86);
-            backdrop-filter: blur(4px);
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(6px);
             color: #f8fafc;
             font-size: 11px;
             font-weight: 600;
             letter-spacing: 0.02em;
-            padding: 2px 7px;
-            border-radius: 6px;
+            padding: 2.5px 8px;
+            border-radius: 7px;
             white-space: nowrap;
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.22);
-            transform: translateY(-20px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22);
+            transform: translateY(-21px);
             display: inline-block;
             transition: all 0.2s ease;
         }
         .station-badge-docking {
             background: #f59e0b;
-            color: #0f172a;
+            color: #090d16;
             font-weight: 800;
             border: 1.5px solid #ffffff;
-            transform: translateY(-24px) scale(1.06);
+            transform: translateY(-25px) scale(1.06);
         }
 
         .bus-marker-icon { background: transparent; border: none; }
@@ -64,8 +87,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 38px;
-            height: 38px;
+            width: 40px;
+            height: 40px;
         }
         .bus-badge {
             display: flex;
@@ -77,14 +100,14 @@
             color: white;
             font-size: 14px;
             border: 2.5px solid #ffffff;
-            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.38);
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.35), 0 0 0 1px rgba(15, 23, 42, 0.08);
             z-index: 2;
             transition: transform 0.2s ease;
         }
         .bus-docking-ring {
             position: absolute;
-            width: 44px;
-            height: 44px;
+            width: 46px;
+            height: 46px;
             border-radius: 50%;
             border: 2.5px solid #f59e0b;
             background: rgba(245, 158, 11, 0.22);
@@ -93,46 +116,47 @@
         }
         .bus-docking-tag {
             position: absolute;
-            top: -22px;
+            top: -23px;
             background: #0f172a;
             color: #fbbf24;
             font-size: 10px;
-            font-weight: 800;
-            padding: 1.5px 7px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            padding: 2px 8px;
             border-radius: 999px;
             white-space: nowrap;
-            border: 1px solid rgba(251, 191, 36, 0.5);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            border: 1px solid rgba(251, 191, 36, 0.45);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.28);
             z-index: 3;
         }
         @keyframes pulse-ring {
             0% { transform: scale(0.85); opacity: 0.9; }
-            70% { transform: scale(1.35); opacity: 0; }
-            100% { transform: scale(1.35); opacity: 0; }
+            70% { transform: scale(1.38); opacity: 0; }
+            100% { transform: scale(1.38); opacity: 0; }
         }
     </style>
 </head>
 <body class="text-slate-800 min-h-screen">
 
-    <!-- 極簡高級感頁首導覽 -->
-    <header class="bg-slate-950/95 backdrop-blur-md text-white sticky top-0 z-50 border-b border-white/10">
+    <!-- 深色琉璃頂部導覽列 -->
+    <header class="bg-slate-950/95 backdrop-blur-xl text-white sticky top-0 z-50 border-b border-white/[0.08]">
         <div class="max-w-7xl mx-auto px-6 py-3.5 flex items-center justify-between gap-4">
             <div class="flex items-center space-x-3.5 cursor-pointer group" onclick="goHome()">
-                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-slate-950 shadow-md shadow-emerald-500/20 group-hover:scale-105 transition">
-                    <i class="fa-solid fa-bus text-base"></i>
+                <div class="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/15 flex items-center justify-center text-emerald-400 shadow-inner group-hover:bg-white/[0.14] transition">
+                    <i class="fa-solid fa-bus text-sm"></i>
                 </div>
-                <h1 class="font-bold text-base sm:text-lg tracking-wider text-slate-50">花蓮公車客運班次與動態模擬系統</h1>
+                <h1 class="font-bold text-base sm:text-[17px] tracking-wider text-slate-100">花蓮公車客運班次與動態模擬系統</h1>
             </div>
 
             <div class="flex items-center space-x-3">
                 <!-- 設備即時系統時鐘 -->
-                <div class="hidden sm:flex items-center bg-white/5 border border-white/10 px-3.5 py-1.5 rounded-xl text-xs font-mono font-semibold text-slate-300 tracking-wider">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-2"></span>
+                <div class="hidden sm:flex items-center bg-white/[0.05] border border-white/10 px-3.5 py-1.5 rounded-xl text-xs font-mono font-medium text-slate-300 tracking-widest tabular-nums">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-2.5 shadow-[0_0_8px_#34d399]"></span>
                     <span id="header-device-clock">--:--:--</span>
                 </div>
 
-                <button id="btn-back-home" onclick="goHome()" class="hidden bg-white/10 hover:bg-white/15 text-slate-100 border border-white/15 px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center transition">
-                    <i class="fa-solid fa-arrow-left mr-2 text-slate-300"></i>返回路線總覽
+                <button id="btn-back-home" onclick="goHome()" class="hidden bg-white/[0.08] hover:bg-white/[0.15] text-slate-100 border border-white/15 px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center transition">
+                    <i class="fa-solid fa-arrow-left mr-2 text-slate-300 text-[11px]"></i>返回路線總覽
                 </button>
             </div>
         </div>
@@ -144,16 +168,16 @@
     <section id="home-view" class="max-w-7xl mx-auto px-6 py-8 space-y-8">
         
         <!-- 歡迎橫幅與客運篩選 -->
-        <div class="premium-card rounded-3xl p-6 sm:p-7 space-y-5">
+        <div class="luxe-card rounded-3xl p-6 sm:p-7 space-y-5">
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
                 <div>
                     <h2 class="text-xl font-extrabold text-slate-900 tracking-tight">選擇客運路線與發車班次</h2>
                     <div class="text-xs text-slate-500 font-medium mt-2 flex flex-wrap items-center gap-3">
                         <span class="inline-flex items-center text-slate-600">
                             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping mr-2"></span>
-                            <span>行駛中（同步設備現在時刻）</span>
+                            <span>行駛中（自動同步設備現在時刻）</span>
                         </span>
-                        <span class="text-slate-300">|</span>
+                        <span class="text-slate-300">•</span>
                         <span class="inline-flex items-center text-slate-600">
                             <span class="w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>
                             <span>下一班即將發車</span>
@@ -162,14 +186,14 @@
                 </div>
                 <div class="relative w-full md:w-72">
                     <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-400 text-xs"></i>
-                    <input type="text" id="route-search-input" oninput="renderHomeOperators()" placeholder="搜尋路線編號或起訖站名..." class="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-700 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 transition">
+                    <input type="text" id="route-search-input" oninput="renderHomeOperators()" placeholder="搜尋路線編號或起訖站名..." class="w-full pl-9 pr-4 py-2.5 bg-slate-50/80 border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-700 placeholder-slate-400 focus:bg-white focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-900/5 transition">
                 </div>
             </div>
 
             <!-- 客運公司篩選按鈕 + 僅顯示行駛中開關 -->
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <div id="operator-filter-tabs" class="flex flex-wrap gap-2"></div>
-                <label class="inline-flex items-center space-x-2 text-xs font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 px-3.5 py-2 rounded-xl cursor-pointer select-none transition border border-slate-200/80">
+                <label class="inline-flex items-center space-x-2 text-xs font-semibold text-slate-600 bg-slate-50/90 hover:bg-slate-100 px-3.5 py-2 rounded-xl cursor-pointer select-none transition border border-slate-200/80">
                     <input type="checkbox" id="filter-only-running" onchange="renderHomeOperators()" class="rounded text-slate-900 focus:ring-0">
                     <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span>僅顯示目前行駛中</span>
@@ -177,7 +201,7 @@
             </div>
 
             <!-- 深夜收班時段溫馨提示橫幅 -->
-            <div id="off-hours-banner" class="hidden bg-slate-50 border border-slate-200/80 rounded-2xl px-4 py-3 flex items-center gap-3 text-xs text-slate-600">
+            <div id="off-hours-banner" class="hidden bg-slate-50/90 border border-slate-200/80 rounded-2xl px-4 py-3 flex items-center gap-3 text-xs text-slate-600">
                 <i class="fa-regular fa-moon text-slate-400 text-sm"></i>
                 <span class="font-medium">目前為深夜收班時段（各路線均已結束今日營運），點擊任一班次仍可啟動快速動態模擬預覽。</span>
             </div>
@@ -199,57 +223,70 @@
          ========================================== -->
     <section id="sim-view" class="hidden max-w-7xl mx-auto px-6 py-6 space-y-6">
 
-        <!-- 精簡路線標題列 -->
-        <div class="premium-card rounded-3xl p-5 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-            <div class="flex flex-wrap items-center gap-3">
-                <span id="sim-operator-badge" class="text-white text-xs font-bold px-3 py-1 rounded-lg tracking-wide">太魯閣客運</span>
-                <span id="sim-route-badge" class="bg-slate-900 text-white text-xs font-bold px-3 py-1 rounded-lg font-mono">301</span>
-                <h2 id="sim-route-title" class="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">花蓮轉運站 ⇄ 東華大學</h2>
+        <!-- 精簡路線標題列 ＋ 即時行程進度條 -->
+        <div class="luxe-card rounded-3xl p-5 sm:p-6 space-y-4">
+            <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <span id="sim-operator-badge" class="text-white text-xs font-bold px-3 py-1 rounded-lg tracking-wide shadow-sm">太魯閣客運</span>
+                    <span id="sim-route-badge" class="bg-slate-900 text-white text-xs font-bold px-3 py-1 rounded-lg font-mono tracking-wider">301</span>
+                    <h2 id="sim-route-title" class="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">花蓮轉運站 ⇄ 東華大學</h2>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2.5 text-xs font-semibold">
+                    <!-- 原地切換方向按鈕區 -->
+                    <div id="sim-direction-switcher" class="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/70"></div>
+
+                    <!-- 原地切換同路線其他發車班次下拉選單 -->
+                    <div class="flex items-center bg-slate-100/90 px-3 py-1.5 rounded-xl border border-slate-200/70">
+                        <i class="fa-regular fa-clock text-slate-400 mr-1.5"></i>
+                        <select id="sim-trip-select" onchange="onSimTripSelectChange(this.value)" class="bg-transparent text-slate-800 font-mono font-bold text-xs focus:outline-none cursor-pointer tabular-nums"></select>
+                    </div>
+
+                    <!-- 時間同步與快轉倍速切換鈕 -->
+                    <div class="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/70">
+                        <button onclick="setRealtimeSync()" id="spd-btn-1" class="px-2.5 py-1 rounded-lg text-slate-600 hover:bg-white transition flex items-center" title="將時間同步為設備現在真實時刻 (1×)">
+                            <i class="fa-solid fa-satellite-dish mr-1 text-[10px]"></i>即時同步
+                        </button>
+                        <button onclick="setSimSpeed(10)" id="spd-btn-10" class="px-2 py-1 rounded-lg text-slate-600 hover:bg-white transition font-mono">10×</button>
+                        <button onclick="setSimSpeed(25)" id="spd-btn-25" class="px-2 py-1 rounded-lg bg-slate-900 text-white shadow-sm transition font-mono font-bold">25×</button>
+                        <button onclick="setSimSpeed(60)" id="spd-btn-60" class="px-2 py-1 rounded-lg text-slate-600 hover:bg-white transition font-mono">60×</button>
+                    </div>
+
+                    <!-- 即時狀態與下一站距離提示 -->
+                    <span id="sim-live-status" class="border px-3.5 py-1.5 rounded-xl flex items-center transition-colors tabular-nums">
+                        <span id="sim-status-dot" class="w-2 h-2 rounded-full mr-2 shrink-0"></span>
+                        <span id="sim-status-text">公車模擬行駛中...</span>
+                    </span>
+                </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2.5 text-xs font-semibold">
-                <!-- 原地切換方向按鈕區 -->
-                <div id="sim-direction-switcher" class="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/70"></div>
-
-                <!-- 原地切換同路線其他發車班次下拉選單 -->
-                <div class="flex items-center bg-slate-100/90 px-3 py-1.5 rounded-xl border border-slate-200/70">
-                    <i class="fa-regular fa-clock text-slate-400 mr-1.5"></i>
-                    <select id="sim-trip-select" onchange="onSimTripSelectChange(this.value)" class="bg-transparent text-slate-800 font-mono font-bold text-xs focus:outline-none cursor-pointer"></select>
+            <!-- 車載儀表板級「行程總進度條」 -->
+            <div class="pt-2 border-t border-slate-100 flex items-center gap-3 text-[11px] font-semibold text-slate-500">
+                <span id="sim-progress-start" class="truncate max-w-[120px] sm:max-w-[180px] text-slate-600">起點站</span>
+                <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden relative">
+                    <div id="sim-progress-bar" class="h-full rounded-full transition-all duration-150" style="width: 0%; background-color: #059669;"></div>
                 </div>
-
-                <!-- 時間同步與快轉倍速切換鈕 -->
-                <div class="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/70">
-                    <button onclick="setRealtimeSync()" id="spd-btn-1" class="px-2.5 py-1 rounded-lg text-slate-600 hover:bg-white transition flex items-center" title="將時間同步為設備現在真實時刻 (1×)">
-                        <i class="fa-solid fa-satellite-dish mr-1 text-[10px]"></i>即時同步
-                    </button>
-                    <button onclick="setSimSpeed(10)" id="spd-btn-10" class="px-2 py-1 rounded-lg text-slate-600 hover:bg-white transition font-mono">10×</button>
-                    <button onclick="setSimSpeed(25)" id="spd-btn-25" class="px-2 py-1 rounded-lg bg-slate-900 text-white shadow-sm transition font-mono font-bold">25×</button>
-                    <button onclick="setSimSpeed(60)" id="spd-btn-60" class="px-2 py-1 rounded-lg text-slate-600 hover:bg-white transition font-mono">60×</button>
-                </div>
-
-                <!-- 即時狀態與下一站距離提示 -->
-                <span id="sim-live-status" class="border px-3.5 py-1.5 rounded-xl flex items-center transition-colors">
-                    <span id="sim-status-dot" class="w-2 h-2 rounded-full mr-2 shrink-0"></span>
-                    <span id="sim-status-text">公車模擬行駛中...</span>
-                </span>
+                <span id="sim-progress-end" class="truncate max-w-[120px] sm:max-w-[180px] text-slate-600 text-right">終點站</span>
+                <span id="sim-progress-pct" class="font-mono font-bold text-slate-800 w-9 text-right tabular-nums">0%</span>
             </div>
         </div>
 
-        <!-- 主體內容：左側沿線停靠站時刻表 + 右側地圖 -->
+        <!-- 主體內容：左側沿線停靠站時間軸 + 右側地圖 -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            <!-- 左側：本班次各站預估時刻表 -->
-            <div class="premium-card rounded-3xl p-6 space-y-4 flex flex-col h-[580px]">
+            <!-- 左側：本班次各站預估時刻時間軸 -->
+            <div class="luxe-card rounded-3xl p-6 space-y-4 flex flex-col h-[560px]">
                 <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
                     <h3 class="font-bold text-sm text-slate-800 flex items-center">
-                        <i id="timeline-clock-icon" class="fa-solid fa-list-ol mr-2"></i>沿線停靠站與預估時刻
+                        <i id="timeline-clock-icon" class="fa-solid fa-route mr-2"></i>沿線停靠站與預估時刻
                     </h3>
+                    <span id="timeline-stop-count" class="text-[11px] font-semibold text-slate-400"></span>
                 </div>
-                <div id="stop-timeline-list" class="space-y-1.5 overflow-y-auto pr-1 flex-1 no-scrollbar"></div>
+                <div id="stop-timeline-list" class="space-y-1 overflow-y-auto pr-1 flex-1 no-scrollbar relative"></div>
             </div>
 
             <!-- 右側：地圖路徑與動態公車展示 -->
-            <div class="lg:col-span-2 premium-card rounded-3xl p-6 space-y-3.5">
+            <div class="lg:col-span-2 luxe-card rounded-3xl p-6 space-y-3.5">
                 <div class="flex flex-wrap justify-between items-center gap-2">
                     <h3 class="font-bold text-sm text-slate-800 flex items-center">
                         <i id="map-title-icon" class="fa-solid fa-map-location-dot mr-2 text-base"></i>行駛路線與即時動態
@@ -265,7 +302,7 @@
                         </label>
                     </div>
                 </div>
-                <div id="leaflet-map-box" class="border border-slate-200/80"></div>
+                <div id="leaflet-map-box" class="border border-slate-200/80 shadow-inner"></div>
             </div>
 
         </div>
@@ -412,11 +449,27 @@
 
         function initMap() {
             if (leafletMap) return;
-            leafletMap = L.map('leaflet-map-box').setView([23.987, 121.601], 13);
-            L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
+            leafletMap = L.map('leaflet-map-box', { zoomControl: true }).setView([23.987, 121.601], 13);
+
+            // 高質感精簡底圖（CartoDB Voyager）為主，並提供台灣詳細電子地圖切換
+            const voyagerLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                maxZoom: 19,
+                subdomains: 'abcd',
+                attribution: '&copy; OpenStreetMap &copy; CARTO'
+            });
+
+            const nlscLayer = L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}', {
                 maxZoom: 19,
                 attribution: '&copy; 內政部國土測繪中心'
-            }).addTo(leafletMap);
+            });
+
+            voyagerLayer.addTo(leafletMap);
+            L.control.layers(
+                { "精簡高質感底圖": voyagerLayer, "台灣詳細門牌地圖": nlscLayer },
+                null,
+                { position: 'topright' }
+            ).addTo(leafletMap);
+
             busMarkersLayer = L.layerGroup().addTo(leafletMap);
 
             leafletMap.on('zoomend', () => {
@@ -576,7 +629,7 @@
         }
 
         // ==========================================
-        // 首頁視圖渲染（高級克制風格）
+        // 首頁視圖渲染（精品克制風格）
         // ==========================================
         function renderOperatorFilterTabs() {
             const operators = ["ALL", ...new Set(allRoutesData.map(r => getOperatorName(r)))];
@@ -592,7 +645,7 @@
                     btn.className = "px-4 py-2 rounded-xl text-white text-xs font-bold shadow-sm transition flex items-center space-x-2";
                     btn.style.backgroundColor = theme.primary;
                 } else {
-                    btn.className = "px-4 py-2 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/80 text-xs font-semibold transition flex items-center space-x-2";
+                    btn.className = "px-4 py-2 rounded-xl bg-slate-50/90 text-slate-600 hover:bg-slate-100 border border-slate-200/80 text-xs font-semibold transition flex items-center space-x-2";
                 }
 
                 const dotHtml = op === "ALL" ? "" : `<span class="w-2 h-2 rounded-full inline-block" style="background:${isActive ? '#ffffff' : theme.primary}"></span>`;
@@ -657,7 +710,7 @@
                 const emptyMsg = onlyRunning
                     ? "目前時段（深夜收班時間）無正在路上行駛的班次，請取消勾選「僅顯示目前行駛中」以預覽全天時刻表。"
                     : "找不到符合條件的客運路線";
-                container.innerHTML = `<div class="premium-card rounded-3xl p-12 text-center text-slate-400 font-medium text-sm">${emptyMsg}</div>`;
+                container.innerHTML = `<div class="luxe-card rounded-3xl p-12 text-center text-slate-400 font-medium text-sm">${emptyMsg}</div>`;
                 return;
             }
 
@@ -683,7 +736,7 @@
 
                 grouped[opName].forEach(({ route, rKey, fullRouteKey }) => {
                     const card = document.createElement('div');
-                    card.className = "premium-card premium-card-hover rounded-3xl p-6 space-y-4 flex flex-col justify-between";
+                    card.className = "luxe-card luxe-card-hover rounded-3xl p-6 space-y-4 flex flex-col justify-between";
 
                     const dirs = Object.keys(route.patterns);
                     let dirsHtml = '';
@@ -719,7 +772,7 @@
                                     tripBtns += `
                                         <button onclick="startTripSimulation('${fullRouteKey}', '${dir}', ${tIdx})"
                                             title="此班次此刻正在行駛中！點擊同步設備現在時間檢視位置"
-                                            class="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-400 font-mono text-xs font-bold text-emerald-900 transition flex items-center space-x-1.5">
+                                            class="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-400 font-mono text-xs font-bold text-emerald-900 transition flex items-center space-x-1.5 tabular-nums">
                                             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
                                             <span>${timeLabel}</span>
                                             <span class="text-[10px] font-sans bg-emerald-600 text-white px-1.5 py-0.2 rounded">行駛中</span>
@@ -729,7 +782,7 @@
                                     tripBtns += `
                                         <button onclick="startTripSimulation('${fullRouteKey}', '${dir}', ${tIdx})"
                                             title="距離現在最近的一班車"
-                                            class="px-3 py-1.5 rounded-xl bg-amber-50/90 hover:bg-amber-400 hover:text-slate-950 border border-amber-300 font-mono text-xs font-bold text-amber-900 transition flex items-center space-x-1.5">
+                                            class="px-3 py-1.5 rounded-xl bg-amber-50/90 hover:bg-amber-400 hover:text-slate-950 border border-amber-300 font-mono text-xs font-bold text-amber-900 transition flex items-center space-x-1.5 tabular-nums">
                                             <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                             <span>${timeLabel}</span>
                                         </button>
@@ -739,7 +792,7 @@
                                         <button onclick="startTripSimulation('${fullRouteKey}', '${dir}', ${tIdx})"
                                             onmouseover="this.style.backgroundColor='${theme.primary}'; this.style.color='#ffffff'; this.style.borderColor='${theme.primary}';"
                                             onmouseout="this.style.backgroundColor='#f8fafc'; this.style.color='#334155'; this.style.borderColor='#e2e8f0';"
-                                            class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/90 font-mono text-xs font-semibold text-slate-700 transition flex items-center space-x-1">
+                                            class="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/90 font-mono text-xs font-semibold text-slate-700 transition flex items-center space-x-1 tabular-nums">
                                             <span>${timeLabel}</span>
                                         </button>
                                     `;
@@ -754,7 +807,7 @@
                         dirsHtml += `
                             <div class="space-y-2.5 pt-3 border-t border-slate-100">
                                 <div class="text-xs font-semibold text-slate-500 flex items-center justify-between">
-                                    <span class="flex items-center"><i class="fa-solid fa-arrow-right mr-1.5 text-[10px]" style="color:${theme.primary}"></i>往 <strong class="text-slate-700 ml-1">${headsign}</strong></span>
+                                    <span class="flex items-center"><i class="fa-solid fa-arrow-right mr-1.5 text-[10px]" style="color:${theme.primary}"></i>往 <strong class="text-slate-800 ml-1">${headsign}</strong></span>
                                     <span class="text-[11px] text-slate-400 font-normal">${onlyRunning ? visibleCount : trips.length} 班</span>
                                 </div>
                                 <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto no-scrollbar">
@@ -768,8 +821,8 @@
                         <div class="space-y-3.5">
                             <div class="flex items-center justify-between gap-3">
                                 <div class="flex items-center space-x-2.5">
-                                    <span class="inline-block text-white text-xs font-bold px-2.5 py-1 rounded-lg font-mono tracking-wide" style="background:${theme.primary}">${rKey}</span>
-                                    <h4 class="font-bold text-base text-slate-900 leading-snug">${route.name || rKey}</h4>
+                                    <span class="inline-block text-white text-xs font-bold px-2.5 py-1 rounded-lg font-mono tracking-wider shadow-xs" style="background:${theme.primary}">${rKey}</span>
+                                    <h4 class="font-bold text-base text-slate-900 leading-snug tracking-tight">${route.name || rKey}</h4>
                                 </div>
                             </div>
                             ${dirsHtml}
@@ -937,6 +990,14 @@
             document.getElementById('sim-route-title').innerText = `${route.name}（往 ${headsign}）`;
             document.getElementById('timeline-clock-icon').style.color = theme.primary;
             document.getElementById('map-title-icon').style.color = theme.primary;
+            document.getElementById('timeline-stop-count').innerText = `共 ${segments.length} 站`;
+
+            // 設定進度條起訖站名與配色
+            if (segments.length > 0) {
+                document.getElementById('sim-progress-start').innerText = segments[0].name;
+                document.getElementById('sim-progress-end').innerText = segments[segments.length - 1].name;
+            }
+            document.getElementById('sim-progress-bar').style.backgroundColor = theme.primary;
 
             renderSimDirectionAndTripControls(route, fullRouteKey, directionKey, trips, safeIdx, theme);
 
@@ -1072,6 +1133,7 @@
 
             const pattern = route.patterns[directionKey];
             const metrics = getPathMetrics(routeKey, directionKey, pattern.path);
+            const totalRouteDist = Math.max(1, metrics.totalDist);
 
             if (nowSec < startSec) {
                 const waitSec = Math.ceil(startSec - nowSec);
@@ -1079,6 +1141,7 @@
                     coord: metrics.path[0],
                     isDocking: true,
                     focusStopIdx: 0,
+                    progressPct: 0,
                     statusText: `尚未發車，於 ${scheduleSegments[0].name} 待命（距發車 ${formatDurationText(waitSec)}）`
                 };
             }
@@ -1089,10 +1152,12 @@
                 if (nowSec >= seg.arrTime && nowSec <= seg.depTime) {
                     const remainSec = Math.max(1, Math.ceil(seg.depTime - nowSec));
                     const isTerminal = i === scheduleSegments.length - 1;
+                    const pct = isTerminal ? 100 : Math.min(99, Math.round((seg.distM / totalRouteDist) * 100));
                     return {
                         coord: getCoordAtDistance(metrics, seg.distM),
                         isDocking: true,
                         focusStopIdx: i,
+                        progressPct: pct,
                         statusText: isTerminal
                             ? `抵達終點站停靠：${seg.name}`
                             : `靠站停靠中：${seg.name}（約 ${remainSec} 秒後離站）`
@@ -1110,11 +1175,13 @@
                         const currentDist = seg.distM + (nextSeg.distM - seg.distM) * smoothRatio;
                         const remainDistM = Math.max(0, nextSeg.distM - currentDist);
                         const remainArrSec = Math.max(1, Math.ceil(nextSeg.arrTime - nowSec));
+                        const pct = Math.min(99, Math.max(1, Math.round((currentDist / totalRouteDist) * 100)));
 
                         return {
                             coord: getCoordAtDistance(metrics, currentDist),
                             isDocking: false,
                             focusStopIdx: i + 1,
+                            progressPct: pct,
                             statusText: `前往 ${nextSeg.name}（距站約 ${formatRemainDist(remainDistM)} / ${remainArrSec} 秒）`
                         };
                     }
@@ -1126,6 +1193,7 @@
                 coord: getCoordAtDistance(metrics, lastSeg.distM),
                 isDocking: true,
                 focusStopIdx: scheduleSegments.length - 1,
+                progressPct: 100,
                 statusText: `已抵達終點站（本班次已收班）：${lastSeg.name}`
             };
         }
@@ -1197,13 +1265,38 @@
             const { theme } = activeSim;
             const items = document.querySelectorAll('.timeline-stop-item');
             items.forEach((el, idx) => {
+                const dotEl = el.querySelector('.timeline-node-dot');
+                const nameEl = el.querySelector('.timeline-stop-name');
+
                 if (idx === stopIdx) {
                     el.style.borderColor = isDocking ? "#f59e0b" : theme.primary;
                     el.style.backgroundColor = isDocking ? "#fffbeb" : theme.lightBg;
+                    el.style.opacity = "1";
+                    if (dotEl) {
+                        dotEl.style.backgroundColor = isDocking ? "#f59e0b" : theme.primary;
+                        dotEl.style.transform = "scale(1.15)";
+                    }
+                    if (nameEl) nameEl.style.color = "#0f172a";
                     el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else if (idx < stopIdx) {
+                    // 已通過站點呈現沉穩微淡質感
+                    el.style.borderColor = "transparent";
+                    el.style.backgroundColor = "transparent";
+                    el.style.opacity = "0.52";
+                    if (dotEl) {
+                        dotEl.style.backgroundColor = "#94a3b8";
+                        dotEl.style.transform = "scale(1)";
+                    }
+                    if (nameEl) nameEl.style.color = "#475569";
                 } else {
-                    el.style.borderColor = "#f1f5f9";
+                    el.style.borderColor = "transparent";
                     el.style.backgroundColor = "#f8fafc";
+                    el.style.opacity = "1";
+                    if (dotEl) {
+                        dotEl.style.backgroundColor = theme.primary;
+                        dotEl.style.transform = "scale(1)";
+                    }
+                    if (nameEl) nameEl.style.color = "#1e293b";
                 }
             });
 
@@ -1226,6 +1319,13 @@
 
             const pos = getSingleTripPosition(simTimeSec);
             if (!pos) return;
+
+            // 更新行程總進度條
+            const pct = pos.progressPct ?? 0;
+            const barEl = document.getElementById('sim-progress-bar');
+            const pctEl = document.getElementById('sim-progress-pct');
+            if (barEl) barEl.style.width = `${pct}%`;
+            if (pctEl) pctEl.innerText = `${pct}%`;
 
             if (followBusEnabled && leafletMap) {
                 leafletMap.panTo(pos.coord, { animate: false });
@@ -1271,8 +1371,8 @@
                         </div>
                     </div>
                 `,
-                iconSize: [38, 38],
-                iconAnchor: [19, 19]
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
             });
 
             const marker = L.marker(pos.coord, { icon: busIcon, zIndexOffset: 1000 });
@@ -1292,8 +1392,9 @@
             container.innerHTML = '';
 
             scheduleSegments.forEach((seg, idx) => {
+                const isLast = idx === scheduleSegments.length - 1;
                 const item = document.createElement('div');
-                item.className = "timeline-stop-item p-2.5 rounded-xl bg-slate-50 border border-slate-100 flex justify-between items-center cursor-pointer transition text-xs";
+                item.className = "timeline-stop-item relative p-2.5 rounded-xl bg-slate-50 border border-transparent flex justify-between items-center cursor-pointer transition-all text-xs";
                 item.title = "點擊快轉模擬公車停靠此站";
                 item.onclick = () => {
                     isRealtimeSync = false;
@@ -1302,12 +1403,18 @@
                     simTimeSec = seg.arrTime + 2;
                     updateSimulatedBus();
                 };
+
+                const connectorLine = !isLast
+                    ? `<span class="absolute left-[19px] top-7 bottom-[-6px] w-[1.5px] bg-slate-200/90 pointer-events-none"></span>`
+                    : ``;
+
                 item.innerHTML = `
-                    <div class="flex items-center space-x-2.5 truncate">
-                        <span class="w-5 h-5 rounded-full text-white text-[10px] font-mono font-bold flex items-center justify-center shrink-0" style="background:${theme.primary}">${idx + 1}</span>
-                        <span class="font-semibold text-slate-800 truncate">${seg.name}</span>
+                    ${connectorLine}
+                    <div class="flex items-center space-x-3 truncate relative z-10">
+                        <span class="timeline-node-dot w-5 h-5 rounded-full text-white text-[10px] font-mono font-bold flex items-center justify-center shrink-0 transition-transform shadow-xs" style="background:${theme.primary}">${idx + 1}</span>
+                        <span class="timeline-stop-name font-semibold text-slate-800 truncate">${seg.name}</span>
                     </div>
-                    <span class="font-mono font-bold px-2 py-0.5 rounded-md shrink-0" style="background:${theme.lightBg}; color:${theme.text};">${secToTimeStr(seg.displayTime)}</span>
+                    <span class="font-mono font-bold px-2 py-0.5 rounded-md shrink-0 tabular-nums" style="background:${theme.lightBg}; color:${theme.text};">${secToTimeStr(seg.displayTime)}</span>
                 `;
                 container.appendChild(item);
             });
@@ -1332,14 +1439,29 @@
 
             if (pattern && Array.isArray(pattern.path) && pattern.path.length > 0) {
                 const correctedPath = pattern.path.map(toLatLng).filter(Boolean);
+
+                // 外層柔和光暈軌跡
+                const glowLine = L.polyline(correctedPath, {
+                    color: lineColor,
+                    weight: 11,
+                    opacity: 0.22,
+                    lineCap: 'round',
+                    lineJoin: 'round'
+                }).addTo(leafletMap);
+                staticLayers.push(glowLine);
+
+                // 內層核心路線軌跡
                 const polyline = L.polyline(correctedPath, {
                     color: lineColor,
-                    weight: 5,
-                    opacity: 0.85
+                    weight: 4.5,
+                    opacity: 0.92,
+                    lineCap: 'round',
+                    lineJoin: 'round'
                 }).addTo(leafletMap);
                 staticLayers.push(polyline);
+
                 if (!followBusEnabled) {
-                    leafletMap.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+                    leafletMap.fitBounds(polyline.getBounds(), { padding: [45, 45] });
                 }
             }
 
@@ -1349,7 +1471,7 @@
                 const isTerminal = idx === 0 || idx === stops.length - 1;
 
                 const circle = L.circleMarker([lat, lng], {
-                    radius: isTerminal ? 8 : 5,
+                    radius: isTerminal ? 7.5 : 4.5,
                     fillColor: isTerminal ? lineColor : '#ffffff',
                     color: lineColor,
                     weight: 2.5,
