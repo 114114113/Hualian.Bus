@@ -153,19 +153,29 @@
          ========================================== -->
     <section id="sim-view" class="hidden max-w-7xl mx-auto px-6 py-6 space-y-6">
 
-        <!-- 精簡路線標題列 -->
+        <!-- 精簡路線標題列（含輕量級倍速膠囊按鈕與即時距離提示） -->
         <div class="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-md flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center space-x-3">
                 <span id="sim-operator-badge" class="text-white text-xs font-black px-3 py-1 rounded-lg shadow-sm">太魯閣客運</span>
                 <span id="sim-route-badge" class="bg-slate-800 text-white text-xs font-black px-3 py-1 rounded-lg">301 路</span>
                 <h2 id="sim-route-title" class="text-lg font-black text-slate-800">花蓮轉運站 ⇄ 東華大學</h2>
             </div>
-            <div class="flex items-center space-x-3 text-xs font-bold">
+
+            <div class="flex flex-wrap items-center gap-2.5 text-xs font-bold">
+                <!-- 精巧倍速切換鈕 -->
+                <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                    <span class="text-[11px] text-slate-400 px-2">速度</span>
+                    <button onclick="setSimSpeed(10)" id="spd-btn-10" class="px-2 py-1 rounded-lg text-slate-600 hover:bg-white transition font-mono">10×</button>
+                    <button onclick="setSimSpeed(25)" id="spd-btn-25" class="px-2 py-1 rounded-lg bg-slate-900 text-white shadow-sm transition font-mono font-black">25×</button>
+                    <button onclick="setSimSpeed(60)" id="spd-btn-60" class="px-2 py-1 rounded-lg text-slate-600 hover:bg-white transition font-mono">60×</button>
+                </div>
+
                 <span class="bg-slate-100 text-slate-600 px-3 py-1.5 rounded-xl">
-                    發車時間：<strong id="sim-trip-start-label" class="text-slate-900 font-mono text-sm ml-1">08:00</strong>
+                    發車：<strong id="sim-trip-start-label" class="text-slate-900 font-mono text-sm ml-1">08:00</strong>
                 </span>
+
                 <span id="sim-live-status" class="border px-3.5 py-1.5 rounded-xl flex items-center transition-colors">
-                    <span id="sim-status-dot" class="w-2 h-2 rounded-full mr-2"></span>
+                    <span id="sim-status-dot" class="w-2 h-2 rounded-full mr-2 shrink-0"></span>
                     <span id="sim-status-text">公車模擬行駛中...</span>
                 </span>
             </div>
@@ -190,10 +200,13 @@
                     <h3 class="font-extrabold text-sm text-slate-800 flex items-center">
                         <i id="map-title-icon" class="fa-solid fa-map-location-dot mr-2 text-base"></i>班次行駛道路與即時靠站動態
                     </h3>
-                    <label class="text-xs font-bold text-slate-600 flex items-center cursor-pointer select-none">
-                        <input type="checkbox" id="toggle-labels" checked onchange="toggleStationLabels()" class="mr-1.5 rounded text-blue-600">
-                        顯示站名標籤
-                    </label>
+                    <div class="flex items-center space-x-3">
+                        <span id="zoom-hint-text" class="text-[11px] text-slate-400 font-semibold hidden sm:inline">放大地圖自動顯示沿線所有站名</span>
+                        <label class="text-xs font-bold text-slate-600 flex items-center cursor-pointer select-none">
+                            <input type="checkbox" id="toggle-labels" checked onchange="updateStationLabelsVisibility()" class="mr-1.5 rounded text-blue-600">
+                            顯示站名標籤
+                        </label>
+                    </div>
                 </div>
                 <div id="leaflet-map-box" class="shadow-inner border border-slate-200"></div>
             </div>
@@ -225,7 +238,7 @@
                 border: "#fed7aa",
                 text: "#9a3412"
             },
-            "興東客運 / 花蓮客運": {
+            "興東客運": {
                 primary: "#2563eb",      // 經典藍
                 dark: "#1d4ed8",
                 lightBg: "#eff6ff",
@@ -254,25 +267,27 @@
             theme: null,
             startSec: 28800,
             endSec: 31500,
-            scheduleSegments: [] // 儲存每一站的 { arrTime, depTime, distM, name } 確保精準停靠
+            scheduleSegments: []
         };
 
         let leafletMap = null;
         let staticLayers = [];
         let labelMarkers = [];
         let busMarkersLayer = null;
-        let lastHighlightedStopIdx = -1;
+        let lastHighlightedState = "";
+        let currentFocusStopIdx = 0;
 
         let simTimeSec = 28800;
         let isPlaying = false;
-        const SIM_SPEED = 25; // 模擬倍速（讓靠站停頓與路段移動節奏更清晰）
+        let simSpeed = 25;
         let lastFrameTimestamp = null;
 
+        // 客運業者正名歸類（已將 1125、1130、1145 等正名為興東客運）
         function getOperatorName(route) {
             if (route.operator) {
                 if (route.operator.includes("太魯閣")) return "太魯閣客運";
                 if (route.operator.includes("統聯")) return "統聯客運";
-                if (route.operator.includes("興東") || route.operator.includes("花蓮客運")) return "興東客運 / 花蓮客運";
+                if (route.operator.includes("興東") || route.operator.includes("花蓮客運")) return "興東客運";
                 return route.operator;
             }
             const code = getRouteKey(route).replace('hualien_', '');
@@ -283,7 +298,7 @@
                 return "統聯客運";
             }
             if (code.startsWith('1125') || code.startsWith('1130') || code.startsWith('1145')) {
-                return "興東客運 / 花蓮客運";
+                return "興東客運";
             }
             return "花蓮市區與公路客運";
         }
@@ -319,6 +334,11 @@
                 attribution: '&copy; 內政部國土測繪中心'
             }).addTo(leafletMap);
             busMarkersLayer = L.layerGroup().addTo(leafletMap);
+
+            // 監聽地圖縮放層級變化，遠景自動隱藏密集站名標籤
+            leafletMap.on('zoomend', () => {
+                updateStationLabelsVisibility();
+            });
         }
 
         function buildGlobalStopIndex(data) {
@@ -578,7 +598,7 @@
         }
 
         // ==========================================
-        // 建立該班次含「明確靠站停等時間」的完整時刻段表
+        // 建立忠實於原班表的「進站與離站靠站時刻段表」（不灌水推遲後段時間）
         // ==========================================
         function buildTripScheduleSegments(route, routeKey, directionKey, trip, startSec) {
             const pattern = route.patterns[directionKey];
@@ -586,19 +606,22 @@
             const metrics = getPathMetrics(routeKey, directionKey, pattern.path);
             const profile = getTimingProfileForDirection(route, directionKey, trip);
 
-            const DWELL_SECONDS = 15; // 每一站至少停靠 15 秒讓使用者清楚看到靠站動作
             const segments = [];
 
             if (Array.isArray(profile) && profile.length > 0 && stops.length > 0) {
                 const count = Math.min(profile.length, stops.length);
                 for (let i = 0; i < count; i++) {
                     const p = profile[i];
-                    const rawArr = startSec + (p.arrivalOffsetSec ?? 0);
-                    let rawDep = startSec + (p.departureOffsetSec ?? rawArr);
-                    // 確保每站都有足夠視覺辨識的停靠時間（首站與中間站皆保留停靠感）
-                    if (rawDep - rawArr < DWELL_SECONDS) {
-                        rawDep = rawArr + DWELL_SECONDS;
-                    }
+                    const schedArr = startSec + (p.arrivalOffsetSec ?? 0);
+                    const schedDep = startSec + (p.departureOffsetSec ?? schedArr);
+
+                    // 取得下一站進站時間，確保靠站緩衝不超過站間總時間的一半（不推遲後續班表）
+                    const nextArr = (i < count - 1)
+                        ? startSec + (profile[i + 1].arrivalOffsetSec ?? (schedDep + 45))
+                        : (schedDep + 20);
+                    const maxDwell = Math.max(8, Math.min(15, Math.floor((nextArr - schedArr) * 0.35)));
+                    const actualDep = Math.max(schedDep, schedArr + maxDwell);
+
                     const distM = (typeof stops[i].distanceAlongPathM === 'number')
                         ? stops[i].distanceAlongPathM
                         : (metrics.totalDist * (i / Math.max(1, count - 1)));
@@ -606,20 +629,19 @@
                     segments.push({
                         stopIdx: i,
                         name: stops[i].name,
-                        arrTime: rawArr,
-                        depTime: rawDep,
+                        displayTime: schedArr, // 左側時刻表顯示原班表精準時刻
+                        arrTime: schedArr,
+                        depTime: actualDep,
                         distM
                     });
                 }
             } else if (stops.length > 0) {
-                // 若無 timingProfiles，依道路距離均分並自動加入每站 15 秒靠站停等
                 const totalTravelSec = Math.max(900, Math.round(metrics.totalDist / 8.5));
-                const stepTravel = totalTravelSec / Math.max(1, stops.length - 1);
-                let cursor = startSec;
+                const stepTotal = totalTravelSec / Math.max(1, stops.length - 1);
 
                 for (let i = 0; i < stops.length; i++) {
-                    const arrTime = Math.round(cursor);
-                    const depTime = arrTime + DWELL_SECONDS;
+                    const schedArr = Math.round(startSec + stepTotal * i);
+                    const dwell = Math.max(8, Math.min(15, Math.floor(stepTotal * 0.3)));
                     const distM = (typeof stops[i].distanceAlongPathM === 'number')
                         ? stops[i].distanceAlongPathM
                         : (metrics.totalDist * (i / Math.max(1, stops.length - 1)));
@@ -627,19 +649,32 @@
                     segments.push({
                         stopIdx: i,
                         name: stops[i].name,
-                        arrTime,
-                        depTime,
+                        displayTime: schedArr,
+                        arrTime: schedArr,
+                        depTime: schedArr + dwell,
                         distM
                     });
-                    cursor = depTime + Math.max(20, stepTravel);
                 }
             }
 
             return segments;
         }
 
+        function setSimSpeed(spd) {
+            simSpeed = spd;
+            [10, 25, 60].forEach(s => {
+                const btn = document.getElementById(`spd-btn-${s}`);
+                if (!btn) return;
+                if (s === spd) {
+                    btn.className = "px-2 py-1 rounded-lg bg-slate-900 text-white shadow-sm transition font-mono font-black";
+                } else {
+                    btn.className = "px-2 py-1 rounded-lg text-slate-600 hover:bg-white transition font-mono";
+                }
+            });
+        }
+
         // ==========================================
-        // 進入視圖 2：單一班次專屬模擬器（套用業者顏色 + 靠站模擬）
+        // 進入視圖 2：單一班次專屬模擬器
         // ==========================================
         function startTripSimulation(fullRouteKey, directionKey, sortedTripIndex) {
             const route = allRoutesData.find((r, idx) => getRouteKey(r, idx) === fullRouteKey);
@@ -666,7 +701,8 @@
                 endSec,
                 scheduleSegments: segments
             };
-            lastHighlightedStopIdx = -1;
+            lastHighlightedState = "";
+            currentFocusStopIdx = 0;
 
             document.getElementById('home-view').classList.add('hidden');
             document.getElementById('sim-view').classList.remove('hidden');
@@ -676,7 +712,6 @@
             initMap();
             setTimeout(() => leafletMap.invalidateSize(), 100);
 
-            // 套用客運公司專屬顏色到模擬器 UI
             const headsign = route.patterns[directionKey]?.headsign || (directionKey === 'outbound' ? '去程' : '返程');
             const opBadge = document.getElementById('sim-operator-badge');
             opBadge.innerText = operatorName;
@@ -691,8 +726,7 @@
             document.getElementById('timeline-clock-icon').style.color = theme.primary;
             document.getElementById('map-title-icon').style.color = theme.primary;
 
-            // 從起站停靠準備發車開始模擬（先看到起站停靠 5 秒後發車移動）
-            simTimeSec = startSec + 3;
+            simTimeSec = startSec + 2;
             renderStaticRouteAndStops();
             renderStopTimelineList();
             updateSimulatedBus();
@@ -710,7 +744,7 @@
         }
 
         // ==========================================
-        // 幾何與靠站模擬計算引擎
+        // 幾何與靠站模擬計算引擎（含距離下一站公尺與秒數預估）
         // ==========================================
         function calcDistanceM(lat1, lon1, lat2, lon2) {
             const R = 6371000;
@@ -754,6 +788,11 @@
             return path[path.length - 1];
         }
 
+        function formatRemainDist(meters) {
+            if (meters >= 1000) return `${(meters / 1000).toFixed(1)} 公里`;
+            return `${Math.max(10, Math.round(meters / 10) * 10)} 公尺`;
+        }
+
         function getSingleTripPosition(nowSec) {
             const { route, routeKey, directionKey, scheduleSegments } = activeSim;
             if (!route || scheduleSegments.length === 0) return null;
@@ -764,7 +803,7 @@
             for (let i = 0; i < scheduleSegments.length; i++) {
                 const seg = scheduleSegments[i];
 
-                // 狀態 A：公車正停靠在該站牌上下客
+                // 狀態 A：靠站停靠中
                 if (nowSec >= seg.arrTime && nowSec <= seg.depTime) {
                     const remainSec = Math.max(1, Math.ceil(seg.depTime - nowSec));
                     const isTerminal = i === scheduleSegments.length - 1;
@@ -778,22 +817,24 @@
                     };
                 }
 
-                // 狀態 B：公車離開本站，正在前往下一站的道路上行駛
+                // 狀態 B：兩站之間行駛中（計算距離下一站剩餘公尺與預估秒數）
                 if (i < scheduleSegments.length - 1) {
                     const nextSeg = scheduleSegments[i + 1];
                     if (nowSec > seg.depTime && nowSec < nextSeg.arrTime) {
                         const travelRatio = (nowSec - seg.depTime) / Math.max(1, nextSeg.arrTime - seg.depTime);
-                        // 加入平滑加減速曲線（Ease-in-out），讓起步與進站煞車更擬真
                         const smoothRatio = travelRatio < 0.5
                             ? 2 * travelRatio * travelRatio
                             : 1 - Math.pow(-2 * travelRatio + 2, 2) / 2;
+
                         const currentDist = seg.distM + (nextSeg.distM - seg.distM) * smoothRatio;
+                        const remainDistM = Math.max(0, nextSeg.distM - currentDist);
+                        const remainArrSec = Math.max(1, Math.ceil(nextSeg.arrTime - nowSec));
 
                         return {
                             coord: getCoordAtDistance(metrics, currentDist),
                             isDocking: false,
                             focusStopIdx: i + 1,
-                            statusText: `行駛中，下一站：${nextSeg.name}`
+                            statusText: `前往 ${nextSeg.name}（距站約 ${formatRemainDist(remainDistM)} / ${remainArrSec} 秒）`
                         };
                     }
                 }
@@ -808,9 +849,37 @@
             };
         }
 
+        // 智慧站名顯示控制：遠景僅顯示首末站與目前聚焦站點，放大至 zoom >= 14 才展開全部站名
+        function updateStationLabelsVisibility() {
+            if (!leafletMap || labelMarkers.length === 0) return;
+            const userEnabled = document.getElementById('toggle-labels').checked;
+            const zoom = leafletMap.getZoom();
+            const lastIdx = labelMarkers.length - 1;
+
+            labelMarkers.forEach((lbl, idx) => {
+                if (!userEnabled) {
+                    if (leafletMap.hasLayer(lbl)) leafletMap.removeLayer(lbl);
+                    return;
+                }
+
+                const isImportant = (idx === 0 || idx === lastIdx || idx === currentFocusStopIdx);
+                const shouldShow = (zoom >= 14) || isImportant;
+
+                if (shouldShow) {
+                    if (!leafletMap.hasLayer(lbl)) lbl.addTo(leafletMap);
+                } else {
+                    if (leafletMap.hasLayer(lbl)) leafletMap.removeLayer(lbl);
+                }
+            });
+        }
+
         function highlightTimelineStop(stopIdx, isDocking) {
-            if (lastHighlightedStopIdx === `${stopIdx}_${isDocking}`) return;
-            lastHighlightedStopIdx = `${stopIdx}_${isDocking}`;
+            currentFocusStopIdx = stopIdx;
+            updateStationLabelsVisibility();
+
+            const stateKey = `${stopIdx}_${isDocking}`;
+            if (lastHighlightedState === stateKey) return;
+            lastHighlightedState = stateKey;
 
             const { theme } = activeSim;
             const items = document.querySelectorAll('.timeline-stop-item');
@@ -825,7 +894,6 @@
                 }
             });
 
-            // 同步高亮地圖上的站名標籤
             labelMarkers.forEach((lbl, idx) => {
                 const el = lbl.getElement();
                 if (!el) return;
@@ -865,7 +933,6 @@
 
             highlightTimelineStop(pos.focusStopIdx, pos.isDocking);
 
-            // 動態建立公車圖示（停靠時加上橘色脈衝光圈與「靠站中」標籤）
             const dockingHtml = pos.isDocking
                 ? `<div class="bus-docking-ring"></div><div class="bus-docking-tag">靠站停靠中</div>`
                 : ``;
@@ -905,7 +972,7 @@
                 item.className = "timeline-stop-item p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex justify-between items-center cursor-pointer transition text-xs";
                 item.title = "點擊直接模擬公車停靠此站";
                 item.onclick = () => {
-                    simTimeSec = seg.arrTime + 2; // 跳轉至該站剛進站停靠的瞬間
+                    simTimeSec = seg.arrTime + 2;
                     updateSimulatedBus();
                 };
                 item.innerHTML = `
@@ -913,7 +980,7 @@
                         <span class="w-5 h-5 rounded-full text-white text-[10px] font-mono font-bold flex items-center justify-center shrink-0" style="background:${theme.primary}">${idx + 1}</span>
                         <span class="font-bold text-slate-800 truncate">${seg.name}</span>
                     </div>
-                    <span class="font-mono font-black px-2 py-0.5 rounded-md shrink-0" style="background:${theme.lightBg}; color:${theme.text};">${secToTimeStr(seg.arrTime)}</span>
+                    <span class="font-mono font-black px-2 py-0.5 rounded-md shrink-0" style="background:${theme.lightBg}; color:${theme.text};">${secToTimeStr(seg.displayTime)}</span>
                 `;
                 container.appendChild(item);
             });
@@ -946,7 +1013,6 @@
                 leafletMap.fitBounds(polyline.getBounds(), { padding: [40, 40] });
             }
 
-            const showLabels = document.getElementById('toggle-labels').checked;
             stops.forEach((st, idx) => {
                 if (!st.coord) return;
                 const [lat, lng] = st.coord;
@@ -975,17 +1041,10 @@
                     iconAnchor: [0, 0]
                 });
                 const lblMarker = L.marker([lat, lng], { icon: labelIcon, interactive: false });
-                if (showLabels) lblMarker.addTo(leafletMap);
                 labelMarkers.push(lblMarker);
             });
-        }
 
-        function toggleStationLabels() {
-            const show = document.getElementById('toggle-labels').checked;
-            labelMarkers.forEach(lbl => {
-                if (show) lbl.addTo(leafletMap);
-                else leafletMap.removeLayer(lbl);
-            });
+            updateStationLabelsVisibility();
         }
 
         function secToTimeStr(totalSec, includeSec = false) {
@@ -1001,8 +1060,7 @@
             const dt = (timestamp - lastFrameTimestamp) / 1000;
             lastFrameTimestamp = timestamp;
 
-            simTimeSec += dt * SIM_SPEED;
-            // 抵達終點站並停靠展示後，循環重播該班次
+            simTimeSec += dt * simSpeed;
             if (simTimeSec > activeSim.endSec + 10) {
                 simTimeSec = activeSim.startSec;
             }
