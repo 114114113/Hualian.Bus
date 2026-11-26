@@ -150,8 +150,23 @@
                 </div>
             </div>
 
-            <!-- 客運公司篩選按鈕 -->
-            <div id="operator-filter-tabs" class="flex flex-wrap gap-2"></div>
+            <!-- 客運公司篩選按鈕 + 僅顯示行駛中開關 -->
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <div id="operator-filter-tabs" class="flex flex-wrap gap-2"></div>
+                <label class="inline-flex items-center space-x-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200/70 px-3.5 py-2 rounded-xl cursor-pointer select-none transition border border-slate-200">
+                    <input type="checkbox" id="filter-only-running" onchange="renderHomeOperators()" class="rounded text-emerald-600 focus:ring-0">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>僅顯示目前行駛中班次</span>
+                </label>
+            </div>
+
+            <!-- 深夜收班時段溫馨提示横幅（無行駛中車輛時自動顯示） -->
+            <div id="off-hours-banner" class="hidden bg-indigo-50/90 border border-indigo-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 text-xs text-indigo-900">
+                <div class="flex items-center space-x-2.5">
+                    <i class="fa-solid fa-moon text-indigo-500 text-sm"></i>
+                    <span class="font-bold">目前為深夜收班時段（各路線均已結束今日營運），點擊下方任一班次時間仍可啟動 25× 快速動態模擬預覽。</span>
+                </div>
+            </div>
         </div>
 
         <!-- 載入提示 -->
@@ -301,6 +316,7 @@
         let leafletMap = null;
         let staticLayers = [];
         let labelMarkers = [];
+        let stopCircleMarkers = [];
         let busMarkersLayer = null;
         let lastHighlightedState = "";
         let currentFocusStopIdx = 0;
@@ -308,7 +324,7 @@
         let simTimeSec = 28800;
         let isPlaying = false;
         let simSpeed = 25;
-        let isRealtimeSync = false; // 是否處於「100% 同步設備真實時間」模式
+        let isRealtimeSync = false;
         let lastFrameTimestamp = null;
         let followBusEnabled = false;
 
@@ -316,6 +332,14 @@
         function getDeviceSecondsOfDay() {
             const now = new Date();
             return now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + (now.getMilliseconds() / 1000);
+        }
+
+        // 跨午夜班次秒數正規化（若班次跨越 00:00 且目前在凌晨 00:00~04:00 之間，自動補上 86400 秒對齊時間軸）
+        function normalizeNowForTrip(rawNowSec, tripStartSec, tripEndSec) {
+            if (tripEndSec > 86400 && rawNowSec < 14400) {
+                return rawNowSec + 86400;
+            }
+            return rawNowSec;
         }
 
         // 每秒更新頁首設備時鐘
@@ -529,7 +553,6 @@
             return null;
         }
 
-        // 估算某班次的總行駛秒數（用於首頁判斷該班次此刻是否正在路上行駛）
         function estimateTripDurationSec(route, routeKey, directionKey, trip) {
             const profile = getTimingProfileForDirection(route, directionKey, trip);
             if (Array.isArray(profile) && profile.length > 0) {
@@ -542,7 +565,7 @@
         }
 
         // ==========================================
-        // 首頁視圖渲染（標示此刻「行駛中」與「即將發車」班次）
+        // 首頁視圖渲染（支援「僅顯示行駛中班次」與深夜收班提示）
         // ==========================================
         function renderOperatorFilterTabs() {
             const operators = ["ALL", ...new Set(allRoutesData.map(r => getOperatorName(r)))];
@@ -575,25 +598,57 @@
         function renderHomeOperators() {
             const container = document.getElementById('operators-container');
             const keyword = (document.getElementById('route-search-input').value || '').trim().toLowerCase();
-            const nowSec = Math.floor(getDeviceSecondsOfDay());
+            const onlyRunning = document.getElementById('filter-only-running').checked;
+            const rawNowSec = Math.floor(getDeviceSecondsOfDay());
             container.innerHTML = '';
+
+            let totalRunningCount = 0;
 
             const grouped = {};
             allRoutesData.forEach((route, idx) => {
                 const op = getOperatorName(route);
                 if (selectedOperatorFilter !== "ALL" && op !== selectedOperatorFilter) return;
 
-                const rKey = getRouteKey(route, idx).replace('hualien_', '');
+                const fullRouteKey = getRouteKey(route, idx);
+                const rKey = fullRouteKey.replace('hualien_', '');
                 const rName = route.name || rKey;
                 if (keyword && !rKey.toLowerCase().includes(keyword) && !rName.toLowerCase().includes(keyword)) return;
 
+                // 檢查該路線是否至少有一班「此刻正在行駛中」
+                let routeHasRunning = false;
+                Object.keys(route.patterns).forEach(dir => {
+                    const trips = getTripsForDirection(route, dir);
+                    trips.forEach(t => {
+                        const sSec = Number(t.startSec ?? t.departureSec ?? 0);
+                        const dSec = estimateTripDurationSec(route, fullRouteKey, dir, t);
+                        const normNow = normalizeNowForTrip(rawNowSec, sSec, sSec + dSec);
+                        if (normNow >= sSec && normNow <= sSec + dSec) {
+                            routeHasRunning = true;
+                            totalRunningCount++;
+                        }
+                    });
+                });
+
+                if (onlyRunning && !routeHasRunning) return;
+
                 if (!grouped[op]) grouped[op] = [];
-                grouped[op].push({ route, rKey });
+                grouped[op].push({ route, rKey, fullRouteKey });
             });
+
+            // 若全縣目前沒有任何行駛中的車輛，自動顯示深夜收班溫馨提示橫幅
+            const offHoursBanner = document.getElementById('off-hours-banner');
+            if (totalRunningCount === 0 && allRoutesData.length > 0) {
+                offHoursBanner.classList.remove('hidden');
+            } else {
+                offHoursBanner.classList.add('hidden');
+            }
 
             const operatorNames = Object.keys(grouped);
             if (operatorNames.length === 0) {
-                container.innerHTML = `<div class="bg-white rounded-3xl p-12 text-center text-slate-400 font-bold text-sm">找不到符合條件的客運路線</div>`;
+                const emptyMsg = onlyRunning
+                    ? "目前時段（可能為深夜收班時間）無正在路上行駛的班次，請取消勾選「僅顯示目前行駛中班次」以預覽全天時刻表。"
+                    : "找不到符合條件的客運路線";
+                container.innerHTML = `<div class="bg-white rounded-3xl p-12 text-center text-slate-400 font-bold text-sm">${emptyMsg}</div>`;
                 return;
             }
 
@@ -615,12 +670,11 @@
                 const grid = document.createElement('div');
                 grid.className = "grid grid-cols-1 md:grid-cols-2 gap-5";
 
-                grouped[opName].forEach(({ route, rKey }) => {
+                grouped[opName].forEach(({ route, rKey, fullRouteKey }) => {
                     const card = document.createElement('div');
                     card.className = "bg-white rounded-3xl p-6 border border-slate-200/80 shadow-md hover:shadow-lg transition space-y-4 flex flex-col justify-between";
                     card.style.borderTop = `4px solid ${theme.primary}`;
 
-                    const fullRouteKey = getRouteKey(route);
                     const dirs = Object.keys(route.patterns);
                     let dirsHtml = '';
 
@@ -630,23 +684,28 @@
 
                         let nextTripIdx = -1;
                         if (trips.length > 0) {
-                            nextTripIdx = trips.findIndex(t => Number(t.startSec ?? t.departureSec ?? 0) >= nowSec);
+                            nextTripIdx = trips.findIndex(t => Number(t.startSec ?? t.departureSec ?? 0) >= rawNowSec);
                             if (nextTripIdx === -1) nextTripIdx = 0;
                         }
 
                         let tripBtns = '';
+                        let visibleCount = 0;
+
                         if (trips.length === 0) {
                             tripBtns = `<span class="text-xs text-slate-400">無固定班次資料</span>`;
                         } else {
                             trips.forEach((t, tIdx) => {
                                 const startSec = Number(t.startSec ?? t.departureSec ?? 0);
                                 const durSec = estimateTripDurationSec(route, fullRouteKey, dir, t);
-                                const isRunningNow = (nowSec >= startSec && nowSec <= startSec + durSec);
+                                const normNow = normalizeNowForTrip(rawNowSec, startSec, startSec + durSec);
+                                const isRunningNow = (normNow >= startSec && normNow <= startSec + durSec);
                                 const timeLabel = secToTimeStr(startSec);
                                 const isNext = (tIdx === nextTripIdx);
 
+                                if (onlyRunning && !isRunningNow) return;
+                                visibleCount++;
+
                                 if (isRunningNow) {
-                                    // 此班次此刻正在路上行駛 -> 點擊將自動同步設備現在真實時間
                                     tripBtns += `
                                         <button onclick="startTripSimulation('${fullRouteKey}', '${dir}', ${tIdx})"
                                             title="此班次此刻正在行駛中！點擊同步設備現在時間檢視位置"
@@ -676,13 +735,17 @@
                                     `;
                                 }
                             });
+
+                            if (onlyRunning && visibleCount === 0) {
+                                tripBtns = `<span class="text-xs text-slate-400">此方向目前無行駛中班次</span>`;
+                            }
                         }
 
                         dirsHtml += `
                             <div class="space-y-2 pt-2 border-t border-slate-100">
                                 <div class="text-xs font-extrabold text-slate-500 flex items-center justify-between">
                                     <span><i class="fa-solid fa-arrow-right mr-1.5" style="color:${theme.primary}"></i>往 ${headsign}</span>
-                                    <span class="text-[11px] text-slate-400">${trips.length} 班次</span>
+                                    <span class="text-[11px] text-slate-400">${onlyRunning ? visibleCount : trips.length} 班次</span>
                                 </div>
                                 <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto no-scrollbar">
                                     ${tripBtns}
@@ -801,7 +864,7 @@
         function setRealtimeSync() {
             isRealtimeSync = true;
             simSpeed = 1;
-            simTimeSec = getDeviceSecondsOfDay();
+            simTimeSec = normalizeNowForTrip(getDeviceSecondsOfDay(), activeSim.startSec, activeSim.endSec);
             updateSpeedButtonsUI();
             updateSimulatedBus();
         }
@@ -867,8 +930,7 @@
 
             renderSimDirectionAndTripControls(route, fullRouteKey, directionKey, trips, safeIdx, theme);
 
-            // 智慧判斷：若使用者設備現在時間正好落在這班車的行駛時段內，直接同步設備真實時間；否則從發車時刻以 25x 演示
-            const deviceNow = getDeviceSecondsOfDay();
+            const deviceNow = normalizeNowForTrip(getDeviceSecondsOfDay(), startSec, endSec);
             if (deviceNow >= startSec && deviceNow <= endSec) {
                 isRealtimeSync = true;
                 simSpeed = 1;
@@ -986,6 +1048,14 @@
             return `${Math.max(10, Math.round(meters / 10) * 10)} 公尺`;
         }
 
+        function formatDurationText(diffSec) {
+            const absSec = Math.max(1, Math.round(Math.abs(diffSec)));
+            const mins = Math.floor(absSec / 60);
+            const secs = absSec % 60;
+            if (mins > 0) return `${mins} 分 ${secs} 秒`;
+            return `${secs} 秒`;
+        }
+
         function getSingleTripPosition(nowSec) {
             const { route, routeKey, directionKey, scheduleSegments, startSec } = activeSim;
             if (!route || scheduleSegments.length === 0) return null;
@@ -993,23 +1063,19 @@
             const pattern = route.patterns[directionKey];
             const metrics = getPathMetrics(routeKey, directionKey, pattern.path);
 
-            // 若在即時同步模式下，設備現在時間還沒到發車時刻
             if (nowSec < startSec) {
                 const waitSec = Math.ceil(startSec - nowSec);
-                const waitMin = Math.floor(waitSec / 60);
-                const waitStr = waitMin > 0 ? `${waitMin} 分 ${waitSec % 60} 秒` : `${waitSec} 秒`;
                 return {
                     coord: metrics.path[0],
                     isDocking: true,
                     focusStopIdx: 0,
-                    statusText: `尚未發車，於 ${scheduleSegments[0].name} 待命（距發車 ${waitStr}）`
+                    statusText: `尚未發車，於 ${scheduleSegments[0].name} 待命（距發車 ${formatDurationText(waitSec)}）`
                 };
             }
 
             for (let i = 0; i < scheduleSegments.length; i++) {
                 const seg = scheduleSegments[i];
 
-                // 狀態 A：靠站停靠中
                 if (nowSec >= seg.arrTime && nowSec <= seg.depTime) {
                     const remainSec = Math.max(1, Math.ceil(seg.depTime - nowSec));
                     const isTerminal = i === scheduleSegments.length - 1;
@@ -1023,7 +1089,6 @@
                     };
                 }
 
-                // 狀態 B：兩站之間行駛中
                 if (i < scheduleSegments.length - 1) {
                     const nextSeg = scheduleSegments[i + 1];
                     if (nowSec > seg.depTime && nowSec < nextSeg.arrTime) {
@@ -1053,6 +1118,40 @@
                 focusStopIdx: scheduleSegments.length - 1,
                 statusText: `已抵達終點站（本班次已收班）：${lastSeg.name}`
             };
+        }
+
+        // 產生智慧站牌互動 Popup HTML（點擊站牌即時顯示本班次到站倒數或通過狀態）
+        function buildSmartStopPopupHtml(stopIdx, stopName) {
+            const { scheduleSegments, theme, operatorName, routeKey } = activeSim;
+            const seg = scheduleSegments[stopIdx];
+            if (!seg) {
+                return `<div style="font-family:sans-serif;font-weight:900;">#${stopIdx + 1} ${stopName}</div>`;
+            }
+
+            const estTimeStr = secToTimeStr(seg.displayTime);
+            let statusLine = "";
+
+            if (simTimeSec >= seg.arrTime && simTimeSec <= seg.depTime) {
+                statusLine = `<div style="margin-top:6px;padding:4px 8px;border-radius:6px;background:#fef3c7;color:#92400e;font-weight:900;font-size:11px;">● 公車目前正停靠於本站</div>`;
+            } else if (simTimeSec < seg.arrTime) {
+                const remainSec = seg.arrTime - simTimeSec;
+                statusLine = `<div style="margin-top:6px;padding:4px 8px;border-radius:6px;background:${theme.lightBg};color:${theme.text};font-weight:900;font-size:11px;">距離進站還有約 ${formatDurationText(remainSec)}</div>`;
+            } else {
+                const passedSec = simTimeSec - seg.depTime;
+                statusLine = `<div style="margin-top:6px;padding:4px 8px;border-radius:6px;background:#f1f5f9;color:#64748b;font-weight:700;font-size:11px;">本班次已於 ${formatDurationText(passedSec)} 前通過本站</div>`;
+            }
+
+            return `
+                <div style="font-family:sans-serif;min-width:170px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                        <span style="background:${theme.primary};color:#fff;font-size:10px;padding:1px 6px;border-radius:4px;font-weight:800;">${operatorName} ${routeKey.replace('hualien_', '')}</span>
+                        <span style="font-size:10px;color:#64748b;font-weight:bold;">第 ${stopIdx + 1} 站</span>
+                    </div>
+                    <div style="font-size:14px;font-weight:900;color:#0f172a;margin-top:4px;">${stopName}</div>
+                    <div style="font-size:11px;color:#475569;margin-top:2px;">表定預計到站：<strong style="font-family:monospace;font-size:12px;color:#0f172a;">${estTimeStr}</strong></div>
+                    ${statusLine}
+                </div>
+            `;
         }
 
         function updateStationLabelsVisibility() {
@@ -1122,6 +1221,13 @@
             if (followBusEnabled && leafletMap) {
                 leafletMap.panTo(pos.coord, { animate: false });
             }
+
+            // 若使用者正點開某個站牌的 Popup，即時更新裡面的倒數秒數
+            stopCircleMarkers.forEach(({ marker, idx, name }) => {
+                if (marker.isPopupOpen()) {
+                    marker.setPopupContent(buildSmartStopPopupHtml(idx, name));
+                }
+            });
 
             const { theme, operatorName, routeKey, startSec } = activeSim;
             const statusBox = document.getElementById('sim-live-status');
@@ -1204,6 +1310,7 @@
             labelMarkers.forEach(l => leafletMap.removeLayer(l));
             staticLayers = [];
             labelMarkers = [];
+            stopCircleMarkers = [];
         }
 
         function renderStaticRouteAndStops() {
@@ -1241,13 +1348,10 @@
                     fillOpacity: 1
                 }).addTo(leafletMap);
 
-                circle.bindPopup(`
-                    <div style="font-family:sans-serif;">
-                        <div style="font-size:10px;color:#64748b;font-weight:bold;">站序 #${idx + 1}</div>
-                        <div style="font-size:14px;font-weight:900;color:#0f172a;">${st.name}</div>
-                    </div>
-                `);
+                // 綁定智慧站牌互動 Popup，點擊時即時計算並顯示預估到站倒數
+                circle.bindPopup(() => buildSmartStopPopupHtml(idx, st.name));
                 staticLayers.push(circle);
+                stopCircleMarkers.push({ marker: circle, idx, name: st.name });
 
                 const labelIcon = L.divIcon({
                     className: 'station-label-icon',
@@ -1276,8 +1380,7 @@
             lastFrameTimestamp = timestamp;
 
             if (isRealtimeSync) {
-                // 100% 緊扣使用者設備當下的真實系統時間
-                simTimeSec = getDeviceSecondsOfDay();
+                simTimeSec = normalizeNowForTrip(getDeviceSecondsOfDay(), activeSim.startSec, activeSim.endSec);
             } else {
                 simTimeSec += dt * simSpeed;
                 if (simTimeSec > activeSim.endSec + 10) {
